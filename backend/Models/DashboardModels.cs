@@ -7,11 +7,18 @@ public sealed record DashboardEndpointSummary(
     string Status,
     double LatencyMs,
     double AvailabilityPercent,
-    int AnomalyCount);
+    int AnomalyCount,
+    DateTimeOffset? LastAnomalyAt);
 
 public sealed record DashboardView(
     DateTimeOffset GeneratedAt,
     int TotalEndpoints,
     int HealthyEndpoints,
     int ActiveAnomalies,
-    IReadOnlyList<DashboardEndpointSummary> Endpoints);
+    double HealthyPercent,
+    double AverageLatencyMs,
+    double P95LatencyMs,
+    double AnomalyRatePerHour,
+    int EndpointsAtRisk,
+    IReadOnlyList<DashboardEndpointSummary> Endpoints,
+    IReadOnlyList<KpiSnapshot> KpiHistory);

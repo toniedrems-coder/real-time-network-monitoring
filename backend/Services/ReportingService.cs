@@ -9,15 +9,18 @@ public sealed class ReportingService
     private readonly EndpointService endpointService;
     private readonly MetricsStore metricsStore;
     private readonly AnomalyStore anomalyStore;
+    private readonly KpiHistoryStore kpiHistoryStore;
 
     public ReportingService(
         EndpointService endpointService,
         MetricsStore metricsStore,
-        AnomalyStore anomalyStore)
+        AnomalyStore anomalyStore,
+        KpiHistoryStore kpiHistoryStore)
     {
         this.endpointService = endpointService;
         this.metricsStore = metricsStore;
         this.anomalyStore = anomalyStore;
+        this.kpiHistoryStore = kpiHistoryStore;
     }
 
     public DashboardView BuildDashboard()
@@ -35,22 +38,83 @@ public sealed class ReportingService
                     metrics?.IsReachable == true ? endpoint.Status : endpoint.Status,
                     metrics?.LatencyMs ?? 0,
                     metrics?.AvailabilityPercent ?? 0,
-                    anomalies.Count);
+                    anomalies.Count,
+                    anomalies.Count > 0 ? anomalies.Max(anomaly => anomaly.DetectedAt) : null);
             })
             .ToArray();
+
+        var latencies = summaries.Where(endpoint => endpoint.LatencyMs > 0)
+            .Select(endpoint => endpoint.LatencyMs)
+            .OrderBy(latency => latency)
+            .ToArray();
+
+        var healthyCount = summaries.Count(endpoint => endpoint.Status.StartsWith("Healthy", StringComparison.OrdinalIgnoreCase));
+        var healthyPercent = summaries.Length == 0 ? 100 : Math.Round(healthyCount * 100d / summaries.Length, 2);
+        var averageLatency = latencies.Length == 0 ? 0 : Math.Round(latencies.Average(), 2);
+        var p95Latency = latencies.Length == 0 ? 0 : Math.Round(Percentile(latencies, 0.95), 2);
+
+        var recentAnomalies = anomalyStore.GetAll()
+            .Where(anomaly => anomaly.DetectedAt >= DateTimeOffset.UtcNow.AddHours(-1))
+            .ToArray();
+        var anomalyRatePerHour = recentAnomalies.Length;
+
+        var endpointsAtRisk = summaries.Count(endpoint =>
+            !endpoint.Status.StartsWith("Healthy", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.AnomalyCount > 0);
 
         return new DashboardView(
             DateTimeOffset.UtcNow,
             summaries.Length,
-            summaries.Count(endpoint => endpoint.Status.StartsWith("Healthy", StringComparison.OrdinalIgnoreCase)),
+            healthyCount,
             summaries.Sum(endpoint => endpoint.AnomalyCount),
-            summaries);
+            healthyPercent,
+            averageLatency,
+            p95Latency,
+            anomalyRatePerHour,
+            endpointsAtRisk,
+            summaries,
+            kpiHistoryStore.GetAll());
+    }
+
+    /// <summary>Builds the KPI portion of the dashboard without the per-endpoint or history detail, for the periodic snapshot worker.</summary>
+    public KpiSnapshot BuildKpiSnapshot()
+    {
+        var dashboard = BuildDashboard();
+        return new KpiSnapshot(
+            dashboard.GeneratedAt,
+            dashboard.TotalEndpoints,
+            dashboard.HealthyEndpoints,
+            dashboard.HealthyPercent,
+            dashboard.AverageLatencyMs,
+            dashboard.P95LatencyMs,
+            dashboard.ActiveAnomalies,
+            dashboard.AnomalyRatePerHour,
+            dashboard.EndpointsAtRisk);
+    }
+
+    private static double Percentile(IReadOnlyList<double> sortedValues, double percentile)
+    {
+        if (sortedValues.Count == 1)
+        {
+            return sortedValues[0];
+        }
+
+        var rank = percentile * (sortedValues.Count - 1);
+        var lowerIndex = (int)Math.Floor(rank);
+        var upperIndex = (int)Math.Ceiling(rank);
+        if (lowerIndex == upperIndex)
+        {
+            return sortedValues[lowerIndex];
+        }
+
+        var weight = rank - lowerIndex;
+        return sortedValues[lowerIndex] + (sortedValues[upperIndex] - sortedValues[lowerIndex]) * weight;
     }
 
     public byte[] GenerateCsv(DashboardView dashboard)
     {
         var csv = new StringBuilder()
-            .AppendLine("EndpointId,Name,Url,Status,LatencyMs,AvailabilityPercent,AnomalyCount");
+            .AppendLine("EndpointId,Name,Url,Status,LatencyMs,AvailabilityPercent,AnomalyCount,LastAnomalyAt");
 
         foreach (var endpoint in dashboard.Endpoints)
         {
@@ -61,7 +125,8 @@ public sealed class ReportingService
                 EscapeCsv(endpoint.Status),
                 endpoint.LatencyMs.ToString("F2", CultureInfo.InvariantCulture),
                 endpoint.AvailabilityPercent.ToString("F2", CultureInfo.InvariantCulture),
-                endpoint.AnomalyCount));
+                endpoint.AnomalyCount,
+                endpoint.LastAnomalyAt?.ToString("O", CultureInfo.InvariantCulture) ?? ""));
         }
 
         return Encoding.UTF8.GetBytes(csv.ToString());
@@ -74,8 +139,10 @@ public sealed class ReportingService
             "Network Monitor Report",
             $"Generated: {dashboard.GeneratedAt:O}",
             $"Endpoints: {dashboard.TotalEndpoints}",
-            $"Healthy: {dashboard.HealthyEndpoints}",
-            $"Active anomalies: {dashboard.ActiveAnomalies}",
+            $"Healthy: {dashboard.HealthyEndpoints} ({dashboard.HealthyPercent:F1}%)",
+            $"Active anomalies: {dashboard.ActiveAnomalies} ({dashboard.AnomalyRatePerHour:F0}/hr)",
+            $"Average latency: {dashboard.AverageLatencyMs:F2} ms (p95: {dashboard.P95LatencyMs:F2} ms)",
+            $"Endpoints at risk: {dashboard.EndpointsAtRisk}",
             string.Empty
         };
 

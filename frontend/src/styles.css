@@ -35,11 +35,11 @@ h2 { font-size: 1.15rem; }
 .button.danger { background: #fff0ef; color: #b42318; font-size: .85rem; padding: .45rem .7rem; }
 .button-row { display: flex; flex-wrap: wrap; gap: .75rem; }
 .details-link { color: #3867d6; display: inline-block; font-size: .85rem; font-weight: 700; margin-top: .8rem; }
-.kpi-grid { display: grid; gap: 1rem; grid-template-columns: repeat(3, 1fr); margin-bottom: 1rem; }
+.kpi-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 1rem; }
 .kpi-card, .panel { background: white; border: 1px solid #e2e8f2; border-radius: 14px; box-shadow: 0 8px 24px #263b5d0c; }
 .kpi-card { padding: 1.25rem; }
 .kpi-card span { color: #69758a; display: block; font-size: .85rem; }
-.kpi-card strong { display: block; font-size: 2rem; margin-top: .3rem; }
+.kpi-card strong { display: block; font-size: 1.5rem; margin-top: .3rem; }
 .kpi-card.good strong { color: #16803c; }
 .kpi-card.warning strong { color: #b54708; }
 .content-grid { display: grid; gap: 1rem; grid-template-columns: 1.5fr 1fr; }

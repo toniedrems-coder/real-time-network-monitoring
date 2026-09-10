@@ -105,10 +105,12 @@ builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaO
 builder.Services.AddSingleton<KafkaProducerService>();
 builder.Services.AddSingleton<MetricsStore>();
 builder.Services.AddSingleton<AnomalyStore>();
+builder.Services.AddSingleton<KpiHistoryStore>();
 builder.Services.AddHostedService<MonitoringService>();
 builder.Services.AddHostedService<MetricsIngestionWorker>();
 builder.Services.AddHostedService<AnomalyDetectionWorker>();
 builder.Services.AddHostedService<AnomalyIngestionWorker>();
+builder.Services.AddHostedService<KpiSnapshotWorker>();
 
 builder.Services.AddSingleton<Instrumentation>();
 

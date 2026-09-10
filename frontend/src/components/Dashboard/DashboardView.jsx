@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import AnomalyList from "./AnomalyList";
 import EndpointCard from "./EndpointCard";
+import KpiTrendChart from "./KpiTrendChart";
 import MetricsChart from "./MetricsChart";
 import ReportExport from "./ReportExport";
 import { apiBase, apiFetch, signalRAccessTokenFactory } from "../../services/api";
@@ -90,8 +91,12 @@ export default function DashboardView() {
       <div className="page-heading"><div><p className="eyebrow">Live overview</p><h1>Network dashboard</h1></div></div>
       <section className="kpi-grid" aria-label="Key performance indicators">
         <Kpi label="Monitored endpoints" value={dashboard.totalEndpoints} />
-        <Kpi label="Healthy endpoints" value={dashboard.healthyEndpoints} tone="good" />
+        <Kpi label="Healthy endpoints" value={`${dashboard.healthyEndpoints} (${dashboard.healthyPercent.toFixed(1)}%)`} tone="good" />
         <Kpi label="Active anomalies" value={dashboard.activeAnomalies} tone="warning" />
+        <Kpi label="Anomalies / hour" value={dashboard.anomalyRatePerHour} tone="warning" />
+        <Kpi label="Avg latency" value={`${dashboard.averageLatencyMs.toFixed(1)} ms`} />
+        <Kpi label="p95 latency" value={`${dashboard.p95LatencyMs.toFixed(1)} ms`} />
+        <Kpi label="Endpoints at risk" value={dashboard.endpointsAtRisk} tone={dashboard.endpointsAtRisk > 0 ? "warning" : "good"} />
       </section>
       <ReportExport />
       <section className="content-grid">
@@ -99,6 +104,10 @@ export default function DashboardView() {
           {dashboard.endpoints?.length ? <div className="endpoint-grid">{dashboard.endpoints.map((endpoint) => <EndpointCard key={endpoint.endpointId} endpoint={endpoint} />)}</div> : <p className="muted">No endpoints are being monitored yet.</p>}
         </article>
         <AnomalyList anomalies={anomalies} />
+      </section>
+      <section className="panel trend-panel">
+        <h2>KPI trend (historical)</h2>
+        <KpiTrendChart history={dashboard.kpiHistory} />
       </section>
       {selectedEndpointId && <section className="panel trend-panel">
         <div className="card-row"><h2>Endpoint trends</h2><select value={selectedEndpointId} onChange={(event) => setSelectedEndpointId(event.target.value)}>
