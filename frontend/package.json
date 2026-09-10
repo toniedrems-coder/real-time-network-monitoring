@@ -16,7 +16,7 @@
     "@microsoft/signalr": "^9.0.6"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^5.0.2",
+    "@vitejs/plugin-react": "^6.1.1",
     "vite": "^7.1.3"
   }
 }
