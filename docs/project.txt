@@ -1,0 +1,6 @@
+build a standalone real-time network monitoring and anomaly detection tool 
+with a .NET backend and React frontend, capable of auto-detecting new endpoints,
+ tracking KPIs, and visualizing trends in a dashboard. Let’s break down a solid 
+ architecture and implementation plan:
+
+ 
