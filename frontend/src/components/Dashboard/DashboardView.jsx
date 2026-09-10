@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import AnomalyList from "./AnomalyList";
 import EndpointCard from "./EndpointCard";
 import MetricsChart from "./MetricsChart";
 import ReportExport from "./ReportExport";
-import { apiFetch } from "../../services/api";
+import { apiBase, apiFetch, signalRAccessTokenFactory } from "../../services/api";
+
+const hubBase = import.meta.env.VITE_SIGNALR_URL || `${apiBase}/hubs/metrics`;
 
 export default function DashboardView() {
   const [dashboard, setDashboard] = useState(null);
   const [anomalies, setAnomalies] = useState([]);
   const [selectedEndpointId, setSelectedEndpointId] = useState("");
   const [error, setError] = useState("");
+  const connectionRef = useRef(null);
+  const subscribedIds = useRef(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +31,16 @@ export default function DashboardView() {
         dashboardData.endpoints?.some((endpoint) => endpoint.endpointId === current)
           ? current
           : dashboardData.endpoints?.[0]?.endpointId ?? "");
+
+      const connection = connectionRef.current;
+      if (connection && connection.state === "Connected") {
+        dashboardData.endpoints?.forEach((endpoint) => {
+          if (!subscribedIds.current.has(endpoint.endpointId)) {
+            subscribedIds.current.add(endpoint.endpointId);
+            connection.invoke("SubscribeToEndpoint", endpoint.endpointId).catch(() => {});
+          }
+        });
+      }
     }).catch(() => {
       if (!cancelled) setError("Unable to load dashboard data.");
     });
@@ -38,6 +53,34 @@ export default function DashboardView() {
       cancelled = true;
       clearInterval(refreshTimer);
     };
+  }, []);
+
+  useEffect(() => {
+    const connection = new HubConnectionBuilder()
+      .withUrl(hubBase, { accessTokenFactory: signalRAccessTokenFactory })
+      .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)
+      .build();
+
+    connection.on("AnomalyDetected", (anomaly) => {
+      setAnomalies((current) => [anomaly, ...current].slice(0, 100));
+    });
+
+    connectionRef.current = connection;
+    connection.start()
+      .then(() => {
+        dashboard?.endpoints?.forEach((endpoint) => {
+          subscribedIds.current.add(endpoint.endpointId);
+          connection.invoke("SubscribeToEndpoint", endpoint.endpointId).catch(() => {});
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      connectionRef.current = null;
+      connection.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (error) return <main className="page"><p className="error">{error}</p></main>;

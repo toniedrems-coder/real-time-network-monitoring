@@ -1,12 +1,16 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
+using backend.Messaging;
 using backend.Models;
-using backend.Hubs;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Hosting;
+using backend.Observability;
+using Microsoft.Extensions.Options;
 
 namespace backend.Services;
 
+/// <summary>
+/// Producer-side worker: probes endpoints on a fixed interval and publishes the
+/// resulting KPIs to Kafka (<see cref="KafkaOptions.MetricsTopic"/>) for downstream
+/// consumers (metrics ingestion, anomaly detection) instead of mutating shared state directly.
+/// </summary>
 public sealed class MonitoringService : BackgroundService
 {
     private static readonly string[] SeedHosts = ["jumia.com","www.mtn.ng", "google.com", "mtn.com.ng"];
@@ -15,32 +19,24 @@ public sealed class MonitoringService : BackgroundService
     private readonly EndpointService endpointService;
     private readonly IHttpClientFactory httpClientFactory;
     private readonly ILogger<MonitoringService> logger;
-    private readonly IHubContext<MetricsHub> hubContext;
-    private readonly ConcurrentDictionary<Guid, EndpointMetrics> latestMetrics = new();
-    private readonly ConcurrentDictionary<Guid, ConcurrentQueue<EndpointMetrics>> history = new();
+    private readonly KafkaProducerService kafkaProducer;
+    private readonly string metricsTopic;
+    private readonly Instrumentation instrumentation;
 
     public MonitoringService(
         EndpointService endpointService,
         IHttpClientFactory httpClientFactory,
         ILogger<MonitoringService> logger,
-        IHubContext<MetricsHub> hubContext)
+        KafkaProducerService kafkaProducer,
+        IOptions<KafkaOptions> kafkaOptions,
+        Instrumentation instrumentation)
     {
         this.endpointService = endpointService;
         this.httpClientFactory = httpClientFactory;
         this.logger = logger;
-        this.hubContext = hubContext;
-    }
-
-    public EndpointMetrics? GetLatest(Guid endpointId)
-    {
-        return latestMetrics.TryGetValue(endpointId, out var metrics) ? metrics : null;
-    }
-
-    public IReadOnlyList<EndpointMetrics> GetHistory(Guid endpointId)
-    {
-        return history.TryGetValue(endpointId, out var metrics)
-            ? metrics.ToArray()
-            : [];
+        this.kafkaProducer = kafkaProducer;
+        metricsTopic = kafkaOptions.Value.MetricsTopic;
+        this.instrumentation = instrumentation;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -96,6 +92,13 @@ public sealed class MonitoringService : BackgroundService
             endpointService.UpdateStatus(endpoint.Id, "Timeout");
         }
 
+        instrumentation.ProbeLatencyHistogram.Record(
+            stopwatch.Elapsed.TotalMilliseconds,
+            new KeyValuePair<string, object?>("endpointId", endpoint.Id.ToString()));
+        instrumentation.ProbeResultCounter.Add(
+            1,
+            new KeyValuePair<string, object?>("reachable", reachable));
+
         var metrics = new EndpointMetrics(
             endpoint.Id,
             timestamp,
@@ -106,16 +109,6 @@ public sealed class MonitoringService : BackgroundService
             Math.Round(throughputMbps, 4),
             reachable);
 
-        latestMetrics[endpoint.Id] = metrics;
-        var endpointHistory = history.GetOrAdd(endpoint.Id, _ => new ConcurrentQueue<EndpointMetrics>());
-        endpointHistory.Enqueue(metrics);
-        while (endpointHistory.Count > 100)
-        {
-            endpointHistory.TryDequeue(out _);
-        }
-
-        await hubContext.Clients
-            .Group(endpoint.Id.ToString())
-            .SendAsync("MetricUpdated", metrics, cancellationToken);
+        await kafkaProducer.PublishAsync(metricsTopic, endpoint.Id.ToString(), metrics, cancellationToken);
     }
 }

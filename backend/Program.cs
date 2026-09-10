@@ -1,9 +1,14 @@
 using backend.Services;
 using backend.Hubs;
+using backend.Messaging;
+using backend.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.OpenApi.Models;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,11 +97,51 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddSingleton<EndpointService>();
 builder.Services.AddSingleton<AnomalyDetectionService>();
+builder.Services.AddSingleton<MlAnomalyDetectionService>();
 builder.Services.AddSingleton<ReportingService>();
 builder.Services.AddHttpClient();
-builder.Services.AddSingleton<MonitoringService>();
-builder.Services.AddHostedService(serviceProvider =>
-    serviceProvider.GetRequiredService<MonitoringService>());
+
+builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaOptions.SectionName));
+builder.Services.AddSingleton<KafkaProducerService>();
+builder.Services.AddSingleton<MetricsStore>();
+builder.Services.AddSingleton<AnomalyStore>();
+builder.Services.AddHostedService<MonitoringService>();
+builder.Services.AddHostedService<MetricsIngestionWorker>();
+builder.Services.AddHostedService<AnomalyDetectionWorker>();
+builder.Services.AddHostedService<AnomalyIngestionWorker>();
+
+builder.Services.AddSingleton<Instrumentation>();
+
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(Instrumentation.ServiceName))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddSource(Instrumentation.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(otlp => otlp.Endpoint = new Uri(otlpEndpoint));
+        }
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddMeter(Instrumentation.ServiceName)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddPrometheusExporter();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            metrics.AddOtlpExporter(otlp => otlp.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
 
 var app = builder.Build();
 
@@ -116,5 +161,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<MetricsHub>("/hubs/metrics");
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();

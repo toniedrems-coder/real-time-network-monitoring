@@ -7,17 +7,17 @@ namespace backend.Services;
 public sealed class ReportingService
 {
     private readonly EndpointService endpointService;
-    private readonly MonitoringService monitoringService;
-    private readonly AnomalyDetectionService anomalyDetectionService;
+    private readonly MetricsStore metricsStore;
+    private readonly AnomalyStore anomalyStore;
 
     public ReportingService(
         EndpointService endpointService,
-        MonitoringService monitoringService,
-        AnomalyDetectionService anomalyDetectionService)
+        MetricsStore metricsStore,
+        AnomalyStore anomalyStore)
     {
         this.endpointService = endpointService;
-        this.monitoringService = monitoringService;
-        this.anomalyDetectionService = anomalyDetectionService;
+        this.metricsStore = metricsStore;
+        this.anomalyStore = anomalyStore;
     }
 
     public DashboardView BuildDashboard()
@@ -25,10 +25,8 @@ public sealed class ReportingService
         var summaries = endpointService.GetAll()
             .Select(endpoint =>
             {
-                var metrics = monitoringService.GetLatest(endpoint.Id);
-                var anomalies = anomalyDetectionService.Detect(
-                    endpoint.Id,
-                    monitoringService.GetHistory(endpoint.Id));
+                var metrics = metricsStore.GetLatest(endpoint.Id);
+                var anomalies = anomalyStore.GetForEndpoint(endpoint.Id);
 
                 return new DashboardEndpointSummary(
                     endpoint.Id,

@@ -13,4 +13,7 @@ public sealed partial record DetectedAnomaly(
 public partial record DetectedAnomaly
 {
     public Guid MetricId { get; init; }
+
+    /// <summary>How the anomaly was detected: "Rule" (statistical baseline) or "MachineLearning" (ML.NET SSA model).</summary>
+    public string DetectionMethod { get; init; } = "Rule";
 }

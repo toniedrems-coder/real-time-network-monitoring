@@ -9,14 +9,14 @@ namespace backend.Controllers;
 public sealed class MetricsController : ControllerBase
 {
     private readonly EndpointService endpointService;
-    private readonly MonitoringService monitoringService;
+    private readonly MetricsStore metricsStore;
 
     public MetricsController(
         EndpointService endpointService,
-        MonitoringService monitoringService)
+        MetricsStore metricsStore)
     {
         this.endpointService = endpointService;
-        this.monitoringService = monitoringService;
+        this.metricsStore = metricsStore;
     }
 
     [HttpGet("{endpointId:guid}")]
@@ -27,7 +27,7 @@ public sealed class MetricsController : ControllerBase
             return NotFound();
         }
 
-        var metrics = monitoringService.GetLatest(endpointId);
+        var metrics = metricsStore.GetLatest(endpointId);
         return metrics is null
             ? StatusCode(StatusCodes.Status503ServiceUnavailable, "Metrics are not available yet.")
             : Ok(metrics);
@@ -41,7 +41,7 @@ public sealed class MetricsController : ControllerBase
             return NotFound();
         }
 
-        var trends = monitoringService.GetHistory(endpointId)
+        var trends = metricsStore.GetHistory(endpointId)
             .Select(metrics => new MetricTrendPoint(
                 metrics.Timestamp,
                 metrics.LatencyMs,

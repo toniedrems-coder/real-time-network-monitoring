@@ -67,6 +67,9 @@ input:focus { border-color: #3867d6; outline: 3px solid #3867d633; }
 .trend-panel { margin-top: 1rem; }
 select { border: 1px solid #ccd5e4; border-radius: 8px; color: #172033; font: inherit; padding: .55rem .7rem; }
 .anomaly time { color: #69758a; font-size: .78rem; }
+.badge { border-radius: 99px; font-size: .68rem; font-weight: 700; padding: .2rem .5rem; text-transform: uppercase; white-space: nowrap; }
+.badge.rule { background: #eef1f5; color: #44516a; }
+.badge.ml { background: #ede9fe; color: #6d28d9; }
 .inline-field { align-items: flex-start; margin: 0; min-width: 220px; }
 .report-endpoint-summary { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: .75rem; }
 @media (max-width: 760px) {

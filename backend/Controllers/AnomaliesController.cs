@@ -9,30 +9,20 @@ namespace backend.Controllers;
 public sealed class AnomaliesController : ControllerBase
 {
     private readonly EndpointService endpointService;
-    private readonly MonitoringService monitoringService;
-    private readonly AnomalyDetectionService anomalyDetectionService;
+    private readonly AnomalyStore anomalyStore;
 
     public AnomaliesController(
         EndpointService endpointService,
-        MonitoringService monitoringService,
-        AnomalyDetectionService anomalyDetectionService)
+        AnomalyStore anomalyStore)
     {
         this.endpointService = endpointService;
-        this.monitoringService = monitoringService;
-        this.anomalyDetectionService = anomalyDetectionService;
+        this.anomalyStore = anomalyStore;
     }
 
     [HttpGet]
     public ActionResult<IReadOnlyList<DetectedAnomaly>> GetAll()
     {
-        var anomalies = endpointService.GetAll()
-            .SelectMany(endpoint => anomalyDetectionService.Detect(
-                endpoint.Id,
-                monitoringService.GetHistory(endpoint.Id)))
-            .OrderByDescending(anomaly => anomaly.DetectedAt)
-            .ToArray();
-
-        return Ok(anomalies);
+        return Ok(anomalyStore.GetAll());
     }
 
     [HttpGet("{endpointId:guid}")]
@@ -43,8 +33,6 @@ public sealed class AnomaliesController : ControllerBase
             return NotFound();
         }
 
-        return Ok(anomalyDetectionService.Detect(
-            endpointId,
-            monitoringService.GetHistory(endpointId)));
+        return Ok(anomalyStore.GetForEndpoint(endpointId));
     }
 }
