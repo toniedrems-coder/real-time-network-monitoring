@@ -5,17 +5,40 @@ using backend.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+
+using backend.Data;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var authority = builder.Configuration["Authentication:Authority"];
 var audience = builder.Configuration["Authentication:Audience"];
 var swaggerTokenUrl = builder.Configuration["Authentication:SwaggerTokenUrl"];
-if (string.IsNullOrWhiteSpace(authority) ||
+
+// In Development, fall back to a built-in dev token issuer (see DevTokenService/
+// DevTokenController) so the API can be exercised end-to-end without a real
+// external identity provider such as Azure AD. Production/other environments
+// still require a properly configured external Authority/Audience.
+var useDevAuth = builder.Environment.IsDevelopment() &&
+    string.IsNullOrWhiteSpace(authority) &&
+    string.IsNullOrWhiteSpace(audience) &&
+    string.IsNullOrWhiteSpace(swaggerTokenUrl);
+
+if (useDevAuth)
+{
+    audience = "network-monitoring-api";
+    swaggerTokenUrl = builder.Configuration["Authentication:DevSwaggerTokenUrl"];
+    if (string.IsNullOrWhiteSpace(swaggerTokenUrl))
+    {
+         swaggerTokenUrl = builder.Configuration["Swagger:TokenUrl"];
+    }
+}
+else if (string.IsNullOrWhiteSpace(authority) ||
     string.IsNullOrWhiteSpace(audience) ||
     string.IsNullOrWhiteSpace(swaggerTokenUrl))
 {
@@ -23,13 +46,46 @@ if (string.IsNullOrWhiteSpace(authority) ||
         "Authentication:Authority, Authentication:Audience, and Authentication:SwaggerTokenUrl must be configured.");
 }
 
+builder.Services.AddSingleton<DevTokenService>();
+
+builder.Services.AddDbContext<MonitoringDbContext>(options =>
+{
+    var connectionString =
+        builder.Configuration.GetConnectionString("MonitoringDatabase");
+
+    options.UseNpgsql(connectionString);
+});
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = authority;
-        options.Audience = audience;
-        options.RequireHttpsMetadata = builder.Configuration.GetValue("Authentication:RequireHttpsMetadata", true);
+        if (useDevAuth)
+        {
+            // Dev-only: validate tokens issued by DevTokenService using a shared
+            // symmetric signing key instead of discovering metadata from an Authority.
+            var devSigningKeyValue = builder.Configuration["Authentication:DevSigningKey"]
+                ?? "dev-only-signing-key-do-not-use-in-production-1234567890";
+            var devIssuer = builder.Configuration["Authentication:DevIssuer"] ?? "https://localhost:7011/";
+            options.RequireHttpsMetadata = false;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = devIssuer,
+                ValidateAudience = true,
+                ValidAudience = audience,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(devSigningKeyValue))
+            };
+        }
+        else
+        {
+            options.Authority = authority;
+            options.Audience = audience;
+            options.RequireHttpsMetadata = builder.Configuration.GetValue("Authentication:RequireHttpsMetadata", true);
+        }
+
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
@@ -93,12 +149,18 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
         policy.WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 builder.Services.AddSingleton<EndpointService>();
 builder.Services.AddSingleton<AnomalyDetectionService>();
 builder.Services.AddSingleton<MlAnomalyDetectionService>();
 builder.Services.AddSingleton<ReportingService>();
+builder.Services.AddScoped<IMetricsRepository, MetricsRepository>();
+builder.Services.AddScoped<IAnomalyRepository, AnomalyRepository>();
+builder.Services.AddScoped<IKpiSnapshotRepository, KpiSnapshotRepository>();
+builder.Services.AddScoped<IEndpointRepository, EndpointRepository>();
+builder.Services.AddHostedService<EndpointInitializationWorker>();
 builder.Services.AddHttpClient();
 
 builder.Services.Configure<KafkaOptions>(builder.Configuration.GetSection(KafkaOptions.SectionName));
@@ -152,7 +214,15 @@ app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "Network Monitoring API v1");
     options.RoutePrefix = "swagger";
-    options.OAuthClientId(builder.Configuration["Authentication:SwaggerClientId"] ?? string.Empty);
+    if (useDevAuth)
+    {
+        options.OAuthClientId(builder.Configuration["Authentication:DevClientId"] ?? "dev-client");
+        options.OAuthClientSecret(builder.Configuration["Authentication:DevClientSecret"] ?? "dev-secret");
+    }
+    else
+    {
+        options.OAuthClientId(builder.Configuration["Authentication:SwaggerClientId"] ?? string.Empty);
+    }
 });
 
 app.UseHttpsRedirection();

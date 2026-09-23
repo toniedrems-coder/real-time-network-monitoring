@@ -15,7 +15,7 @@ This repository contains a .NET Web API backend and a React frontend.
 dotnet run --project backend
 ```
 
-Swagger UI is available at `http://localhost:5000/swagger` when the backend is running locally.
+Swagger UI is available at `http://localhost:5011/swagger` when the backend is running locally.
 
 ### API authentication
 
@@ -23,7 +23,7 @@ The API validates OAuth 2.0 access tokens issued by an external identity provide
 Configure the API with a client-credentials application registration; never put the
 client secret in this repository or in the React application.
 
-Set these backend configuration values using environment variables, user secrets, or
+Set these backend configuration valuecdcds using environment variables, user secrets, or
 your deployment secret store:
 
 ```powershell

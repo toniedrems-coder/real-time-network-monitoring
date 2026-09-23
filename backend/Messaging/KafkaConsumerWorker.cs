@@ -38,7 +38,9 @@ public abstract class KafkaConsumerWorker<TValue> : BackgroundService
             BootstrapServers = kafkaOptions.BootstrapServers,
             GroupId = ConsumerGroupId,
             AutoOffsetReset = AutoOffsetReset.Latest,
-            EnableAutoCommit = true,
+           // EnableAutoCommit = true,
+            EnableAutoCommit = false,
+            EnableAutoOffsetStore = false,
         };
 
         using var consumer = new ConsumerBuilder<string, string>(config).Build();
@@ -61,6 +63,9 @@ public abstract class KafkaConsumerWorker<TValue> : BackgroundService
                 {
                     instrumentation.KafkaConsumedCounter.Add(1, new KeyValuePair<string, object?>("topic", Topic));
                     await HandleAsync(value, stoppingToken);
+
+                    consumer.StoreOffset(result);
+                    consumer.Commit(result);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

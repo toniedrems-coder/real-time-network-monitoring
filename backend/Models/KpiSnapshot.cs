@@ -1,11 +1,6 @@
 namespace backend.Models;
 
-/// <summary>
-/// A point-in-time snapshot of system-wide KPIs, recorded periodically by
-/// <see cref="backend.Services.KpiSnapshotWorker"/> so the dashboard can render
-/// historical trend charts in addition to the current live values.
-/// </summary>
-public sealed record KpiSnapshot(
+public sealed partial record KpiSnapshot(
     DateTimeOffset Timestamp,
     int TotalEndpoints,
     int HealthyEndpoints,
@@ -14,4 +9,7 @@ public sealed record KpiSnapshot(
     double P95LatencyMs,
     int ActiveAnomalies,
     double AnomalyRatePerHour,
-    int EndpointsAtRisk);
+    int EndpointsAtRisk)
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+}

@@ -6,37 +6,71 @@ import { apiFetch } from "../services/api";
 
 export default function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedEndpointId = searchParams.get("endpointId") || "";
+
+  const requestedEndpointId =
+    searchParams.get("endpointId") || "";
+
   const [endpoints, setEndpoints] = useState([]);
-  const [selectedEndpointId, setSelectedEndpointId] = useState(requestedEndpointId);
+  const [selectedEndpointId, setSelectedEndpointId] =
+    useState(requestedEndpointId);
+
   const [metrics, setMetrics] = useState(null);
   const [error, setError] = useState("");
+  const [loadingMetrics, setLoadingMetrics] =
+    useState(false);
+
+  // --------------------------------------------------
+  // Load monitored endpoints
+  // --------------------------------------------------
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadEndpoints = () => apiFetch("/endpoints")
-      .then(assertResponse)
-      .then((response) => response.json())
-      .then((data) => {
+    async function loadEndpoints() {
+      try {
+        const response =
+          await apiFetch("/endpoints");
+
+        assertResponse(response);
+
+        const data = await response.json();
+
         if (cancelled) return;
+
         setEndpoints(data);
+        setError("");
+
         setSelectedEndpointId((current) =>
-          data.some((endpoint) => endpoint.id === current)
+          data.some(
+            (endpoint) =>
+              endpoint.id === current
+          )
             ? current
-            : data[0]?.id ?? "");
-      })
-      .catch(() => {
-        if (!cancelled) setError("Unable to load monitored endpoints.");
-      });
+            : data[0]?.id ?? ""
+        );
+      } catch {
+        if (!cancelled) {
+          setError(
+            "Unable to load monitored endpoints."
+          );
+        }
+      }
+    }
 
     loadEndpoints();
-    const timer = setInterval(loadEndpoints, 30_000);
+
+    const timer =
+      setInterval(loadEndpoints, 30_000);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
   }, []);
+
+  // --------------------------------------------------
+  // Load latest metrics for selected endpoint
+  // --------------------------------------------------
 
   useEffect(() => {
     if (!selectedEndpointId) {
@@ -44,65 +78,317 @@ export default function ReportsPage() {
       return undefined;
     }
 
-    setSearchParams({ endpointId: selectedEndpointId }, { replace: true });
+    setSearchParams(
+      {
+        endpointId: selectedEndpointId,
+      },
+      {
+        replace: true,
+      }
+    );
+
     let cancelled = false;
-    const loadMetrics = () => apiFetch(`/metrics/${selectedEndpointId}`)
-      .then(assertResponse)
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) setMetrics(data);
-      })
-      .catch(() => {
-        if (!cancelled) setMetrics(null);
-      });
+
+    async function loadMetrics() {
+      try {
+        setLoadingMetrics(true);
+
+        const response =
+          await apiFetch(
+            `/metrics/${selectedEndpointId}`
+          );
+
+        assertResponse(response);
+
+        const data = await response.json();
+
+        if (!cancelled) {
+          setMetrics(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setMetrics(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingMetrics(false);
+        }
+      }
+    }
 
     loadMetrics();
-    const timer = setInterval(loadMetrics, 30_000);
+
+    const timer =
+      setInterval(loadMetrics, 30_000);
+
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [selectedEndpointId, setSearchParams]);
+  }, [
+    selectedEndpointId,
+    setSearchParams,
+  ]);
 
-  const selectedEndpoint = endpoints.find((endpoint) => endpoint.id === selectedEndpointId);
+  const selectedEndpoint =
+    endpoints.find(
+      (endpoint) =>
+        endpoint.id === selectedEndpointId
+    );
+
+  const statusClass =
+    selectedEndpoint?.status
+      ?.toLowerCase()
+      .split(" ")[0] || "";
 
   return (
     <main className="page">
+
+      {/* Page heading */}
+
       <div className="page-heading">
         <div>
-          <p className="eyebrow">Exports & trends</p>
-          <h1>Reports</h1>
-          <p className="muted">Review seeded endpoint status and export live monitoring data.</p>
+          <p className="eyebrow">
+            Endpoint investigation
+          </p>
+
+          <h1>Detailed Metrics</h1>
+
+          <p className="muted">
+            Review endpoint health,
+            performance trends and monitoring
+            history.
+          </p>
         </div>
-        <span className="live-indicator">Refreshes every 30 seconds</span>
+
+        <span className="live-indicator">
+          Refreshes every 30 seconds
+        </span>
       </div>
-      <ReportExport />
+
+      {/* Endpoint selector */}
+
       <section className="panel">
         <div className="card-row">
-          <h2>Historical trend analysis</h2>
+          <div>
+            <h2>Endpoint</h2>
+
+            <p className="muted">
+              Select an endpoint to investigate.
+            </p>
+          </div>
+
           <label className="inline-field">
             Endpoint
-            <select value={selectedEndpointId} onChange={(event) => setSelectedEndpointId(event.target.value)}>
-              {!endpoints.length && <option value="">No endpoints available</option>}
-              {endpoints.map((endpoint) => <option key={endpoint.id} value={endpoint.id}>{endpoint.name}</option>)}
+
+            <select
+              value={selectedEndpointId}
+              onChange={(event) =>
+                setSelectedEndpointId(
+                  event.target.value
+                )
+              }
+            >
+              {!endpoints.length && (
+                <option value="">
+                  No endpoints available
+                </option>
+              )}
+
+              {endpoints.map(
+                (endpoint) => (
+                  <option
+                    key={endpoint.id}
+                    value={endpoint.id}
+                  >
+                    {endpoint.name}
+                  </option>
+                )
+              )}
             </select>
           </label>
         </div>
-        {error && <p className="error">{error}</p>}
+
+        {error && (
+          <p className="error">
+            {error}
+          </p>
+        )}
+
         {selectedEndpoint && (
           <div className="report-endpoint-summary">
-            <strong>{selectedEndpoint.url}</strong>
-            <span className={`status ${selectedEndpoint.status.toLowerCase().split(" ")[0]}`}>{selectedEndpoint.status}</span>
-            {metrics && <span className="muted">{metrics.latencyMs.toFixed(2)} ms latency · {metrics.availabilityPercent.toFixed(2)}% availability</span>}
+            <div>
+              <strong>
+                {selectedEndpoint.name}
+              </strong>
+
+              <p className="muted">
+                {selectedEndpoint.url}
+              </p>
+            </div>
+
+            <span
+              className={`status ${statusClass}`}
+            >
+              {selectedEndpoint.status}
+            </span>
           </div>
         )}
-        {selectedEndpointId ? <MetricsChart endpointId={selectedEndpointId} /> : <p className="muted">No endpoint data is available yet.</p>}
       </section>
+
+      {/* Latest KPI cards */}
+
+      {selectedEndpoint && (
+        <section>
+          <div className="card-row">
+            <div>
+              <h2>Current performance</h2>
+
+              <p className="muted">
+                Latest monitoring observation
+                for {selectedEndpoint.name}.
+              </p>
+            </div>
+
+            {loadingMetrics && (
+              <span className="muted">
+                Refreshing...
+              </span>
+            )}
+          </div>
+
+          {metrics ? (
+            <div className="report-kpi-grid">
+
+              <MetricCard
+                title="Latency"
+                value={`${formatNumber(
+                  metrics.latencyMs
+                )} ms`}
+              />
+
+              <MetricCard
+                title="Availability"
+                value={`${formatNumber(
+                  metrics.availabilityPercent
+                )}%`}
+              />
+
+              <MetricCard
+                title="Error rate"
+                value={`${formatNumber(
+                  metrics.errorRatePercent
+                )}%`}
+              />
+
+              <MetricCard
+                title="Packet loss"
+                value={`${formatNumber(
+                  metrics.packetLossPercent
+                )}%`}
+              />
+
+              <MetricCard
+                title="Throughput"
+                value={`${formatNumber(
+                  metrics.throughputMbps,
+                  4
+                )} Mbps`}
+              />
+
+              <MetricCard
+                title="Reachability"
+                value={
+                  metrics.isReachable
+                    ? "Reachable"
+                    : "Unreachable"
+                }
+              />
+
+            </div>
+          ) : (
+            !loadingMetrics && (
+              <p className="muted">
+                No current metric data is
+                available for this endpoint.
+              </p>
+            )
+          )}
+        </section>
+      )}
+
+      {/* Historical trends */}
+
+      <section className="panel">
+        <div className="card-row">
+          <div>
+            <h2>
+              Historical trend analysis
+            </h2>
+
+            <p className="muted">
+              Review changes in latency,
+              availability, error rate and
+              throughput over time.
+            </p>
+          </div>
+        </div>
+
+        {selectedEndpointId ? (
+          <MetricsChart
+            endpointId={selectedEndpointId}
+          />
+        ) : (
+          <p className="muted">
+            No endpoint data is available yet.
+          </p>
+        )}
+      </section>
+
+      {/* Report export */}
+
+      <ReportExport />
+
     </main>
   );
 }
 
+function MetricCard({
+  title,
+  value,
+}) {
+  return (
+    <article className="panel report-kpi-card">
+      <span className="muted">
+        {title}
+      </span>
+
+      <strong className="report-kpi-value">
+        {value}
+      </strong>
+    </article>
+  );
+}
+
+function formatNumber(
+  value,
+  decimals = 2
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(Number(value))
+  ) {
+    return "--";
+  }
+
+  return Number(value).toFixed(decimals);
+}
+
 function assertResponse(response) {
-  if (!response.ok) throw new Error("Request failed.");
+  if (!response.ok) {
+    throw new Error("Request failed.");
+  }
+
   return response;
 }

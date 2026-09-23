@@ -13,7 +13,12 @@ export default function EndpointCard({ endpoint }) {
       {endpoint.lastAnomalyAt && (
         <div className="metric-row"><span>Last anomaly</span><strong>{new Date(endpoint.lastAnomalyAt).toLocaleString()}</strong></div>
       )}
-      <Link className="details-link" to={`/reports?endpointId=${endpoint.endpointId}`}>View detailed metrics</Link>
+<Link
+  className="button details-button"
+  to={`/reports?endpointId=${endpoint.endpointId}`}
+>
+  View detailed metrics
+</Link>
     </article>
   );
 }

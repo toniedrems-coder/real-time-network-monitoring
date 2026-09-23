@@ -22,29 +22,44 @@ public sealed class EndpointsController : ControllerBase
     }
 
     [HttpPost]
-    public ActionResult<MonitoredEndpoint> Create(CreateEndpointRequest request)
+public async Task<ActionResult<MonitoredEndpoint>> Create(
+    CreateEndpointRequest request,
+    CancellationToken cancellationToken)
+{
+    if (string.IsNullOrWhiteSpace(request.Name))
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            ModelState.AddModelError(nameof(request.Name), "Name is required.");
-        }
-
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
-            uri.Scheme is not ("http" or "https") ||
-            string.IsNullOrWhiteSpace(uri.Host))
-        {
-            ModelState.AddModelError(nameof(request.Url), "URL must be a valid HTTP or HTTPS URL.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        var endpoint = endpointService.Create(request);
-
-        return CreatedAtAction(nameof(GetById), new { id = endpoint.Id }, endpoint);
+        ModelState.AddModelError(
+            nameof(request.Name),
+            "Name is required.");
     }
+
+    if (!Uri.TryCreate(
+            request.Url,
+            UriKind.Absolute,
+            out var uri) ||
+        uri.Scheme is not ("http" or "https") ||
+        string.IsNullOrWhiteSpace(uri.Host))
+    {
+        ModelState.AddModelError(
+            nameof(request.Url),
+            "URL must be a valid HTTP or HTTPS URL.");
+    }
+
+    if (!ModelState.IsValid)
+    {
+        return ValidationProblem(ModelState);
+    }
+
+    var endpoint =
+        await endpointService.CreateAsync(
+            request,
+            cancellationToken);
+
+    return CreatedAtAction(
+        nameof(GetById),
+        new { id = endpoint.Id },
+        endpoint);
+}
 
     [HttpGet("{id:guid}")]
     public ActionResult<MonitoredEndpoint> GetById(Guid id)
@@ -55,37 +70,62 @@ public sealed class EndpointsController : ControllerBase
             : NotFound();
     }
 
-    [HttpPut("{id:guid}")]
-    public ActionResult<MonitoredEndpoint> Update(Guid id, CreateEndpointRequest request)
+[HttpPut("{id:guid}")]
+public async Task<ActionResult<MonitoredEndpoint>> Update(
+    Guid id,
+    CreateEndpointRequest request,
+    CancellationToken cancellationToken)
+{
+    if (string.IsNullOrWhiteSpace(request.Name))
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            ModelState.AddModelError(nameof(request.Name), "Name is required.");
-        }
-
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
-            uri.Scheme is not ("http" or "https") ||
-            string.IsNullOrWhiteSpace(uri.Host))
-        {
-            ModelState.AddModelError(nameof(request.Url), "URL must be a valid HTTP or HTTPS URL.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
-        var endpoint = endpointService.Update(id, request);
-        return endpoint is not null
-            ? Ok(endpoint)
-            : NotFound();
+        ModelState.AddModelError(
+            nameof(request.Name),
+            "Name is required.");
     }
 
-    [HttpDelete("{id:guid}")]
-    public IActionResult Delete(Guid id)
+    if (!Uri.TryCreate(
+            request.Url,
+            UriKind.Absolute,
+            out var uri) ||
+        uri.Scheme is not ("http" or "https") ||
+        string.IsNullOrWhiteSpace(uri.Host))
     {
-        return endpointService.Delete(id)
-            ? NoContent()
-            : NotFound();
+        ModelState.AddModelError(
+            nameof(request.Url),
+            "URL must be a valid HTTP or HTTPS URL.");
     }
+
+    if (!ModelState.IsValid)
+    {
+        return ValidationProblem(ModelState);
+    }
+
+    var endpoint =
+        await endpointService.UpdateAsync(
+            id,
+            request,
+            cancellationToken);
+
+    return endpoint is not null
+        ? Ok(endpoint)
+        : NotFound();
+}
+
+
+
+[HttpDelete("{id:guid}")]
+public async Task<IActionResult> Delete(
+    Guid id,
+    CancellationToken cancellationToken)
+{
+    var deleted =
+        await endpointService.DeleteAsync(
+            id,
+            cancellationToken);
+
+    return deleted
+        ? NoContent()
+        : NotFound();
+}
+
 }
