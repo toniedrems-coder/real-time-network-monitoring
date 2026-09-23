@@ -8,13 +8,22 @@ public sealed class MonitoringDbContextFactory
 {
     public MonitoringDbContext CreateDbContext(string[] args)
     {
+          var configuration = new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.json", optional: true)
+        .AddJsonFile("appsettings.Development.json", optional: true)
+        .AddEnvironmentVariables()
+        .Build();
+
         var optionsBuilder =
             new DbContextOptionsBuilder<MonitoringDbContext>();
 
-        var connectionString =
-            "Host=127.0.0.1;Port=5434;Database=network_monitor;Username=network_monitor;Password=network_monitor_dev";
-
+        var connectionString  = configuration.GetConnectionString("MonitoringDb")
+         ?? throw new InvalidOperationException(
+            "Connection string 'MonitoringDb' was not found.");
+            
         optionsBuilder.UseNpgsql(connectionString);
+
 
         return new MonitoringDbContext(optionsBuilder.Options);
     }

@@ -15,10 +15,7 @@ public sealed class MonitoringService : BackgroundService
 {
     private static readonly string[] SeedHosts =
     [
-        "jumia.com",
         "www.mtn.ng",
-        "google.com",
-        "mtn.com.ng"
     ];
 
     private static readonly TimeSpan ProbeInterval =
