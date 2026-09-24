@@ -1,6 +1,7 @@
 using backend.Agents.Abstractions;
 using backend.Agents.Models;
 using backend.Agents.Tools.Monitoring;
+using backend.Models;
 using backend.Services;
 
 namespace backend.Agents.Monitoring;
@@ -11,14 +12,20 @@ public class MonitoringAgent : IAiOpsAgent
     private readonly EndpointService endpointService;
     private readonly IEndpointProbeService endpointProbeService;
 
+    private readonly IServiceScopeFactory scopeFactory;
+
+
+
     public MonitoringAgent(
         ILogger<MonitoringAgent> logger,
         EndpointService endpointService,
-        IEndpointProbeService endpointProbeService)
+        IEndpointProbeService endpointProbeService,
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;   
         this.endpointService = endpointService;
         this.endpointProbeService = endpointProbeService;   
+        this.scopeFactory = scopeFactory;
     }
 
     public string Id => "monitoring-agent";
@@ -52,13 +59,90 @@ public class MonitoringAgent : IAiOpsAgent
                 .Where(result => !result.Reachable)
                 .ToList();
 
-            var data = new Dictionary<string, object>
+            var incidents = new List<Incident>();
+
+            if (unhealthy.Count > 0)
             {
-                ["totalEndpoints"] = results.Length,
-                ["healthyEndpoints"] = results.Count(x => x.Reachable),
-                ["unhealthyEndpoints"] = unhealthy.Count,
-                ["results"] = results
-            };
+                using var scope = scopeFactory.CreateScope();
+
+                var incidentService =
+                    scope.ServiceProvider
+                        .GetRequiredService<IncidentService>();
+
+                foreach (var result in unhealthy)
+                {
+                    var failureType =
+                        DetermineFailureType(result);
+
+                    var severity =
+                        DetermineSeverity(result);
+
+                    var incident =
+                        await incidentService.CreateOrUpdateAsync(
+                            new CreateIncidentRequest(
+                                Title:
+                                    $"{failureType} detected for {result.Url}",
+
+                                Description:
+                                    $"Monitoring Agent detected {result.Status} " +
+                                    $"while probing {result.Url}.",
+
+                                Source:
+                                    "MonitoringAgent",
+
+                                SourceType:
+                                    "Agent",
+
+                                SourceId:
+                                    result.EndpointId,
+
+                                Target:
+                                    result.Url,
+
+                                TargetType:
+                                    "Endpoint",
+
+                                Severity:
+                                    severity,
+
+                                FailureType:
+                                    failureType,
+
+                                HttpStatusCode:
+                                    result.StatusCode,
+
+                                LatencyMs:
+                                    result.LatencyMs,
+
+                                ErrorMessage:
+                                    result.ErrorMessage,
+
+                                DetectedAt:
+                                    result.Timestamp),
+
+                            cancellationToken);
+
+                    incidents.Add(incident);
+                }
+            }
+
+        var data = new Dictionary<string, object>
+{
+    ["totalEndpoints"] = results.Length,
+
+    ["healthyEndpoints"] =
+        results.Count(x => x.Reachable),
+
+    ["unhealthyEndpoints"] =
+        unhealthy.Count,
+
+    ["incidentsCreatedOrUpdated"] =
+        incidents.Count,
+
+    ["results"] = results,
+
+    ["incidents"] = incidents
+};
 
             var message = unhealthy.Count == 0
                 ? $"All {results.Length} monitored endpoints are healthy."
@@ -89,4 +173,60 @@ public class MonitoringAgent : IAiOpsAgent
             }
         }
     }
+
+    private static FailureType DetermineFailureType(
+    EndpointProbeResult result)
+{
+    if (result.Status.Equals(
+        "Timeout",
+        StringComparison.OrdinalIgnoreCase))
+    {
+        return FailureType.Timeout;
+    }
+
+    if (result.Status.Equals(
+        "Unavailable",
+        StringComparison.OrdinalIgnoreCase))
+    {
+        return FailureType.Unavailable;
+    }
+
+    if (result.StatusCode.HasValue &&
+        result.StatusCode.Value >= 400)
+    {
+        return FailureType.HttpError;
+    }
+
+    return FailureType.Unknown;
+}
+
+private static IncidentSeverity DetermineSeverity(
+    EndpointProbeResult result)
+{
+    if (result.StatusCode is >= 500)
+    {
+        return IncidentSeverity.P2;
+    }
+
+    if (result.Status.Equals(
+        "Timeout",
+        StringComparison.OrdinalIgnoreCase))
+    {
+        return IncidentSeverity.P2;
+    }
+
+    if (result.Status.Equals(
+        "Unavailable",
+        StringComparison.OrdinalIgnoreCase))
+    {
+        return IncidentSeverity.P2;
+    }
+
+    if (result.StatusCode is >= 400)
+    {
+        return IncidentSeverity.P3;
+    }
+
+    return IncidentSeverity.P4;
+}
 }

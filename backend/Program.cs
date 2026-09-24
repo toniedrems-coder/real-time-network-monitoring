@@ -189,6 +189,8 @@ builder.Services.AddSingleton<AgentRegistry>();
 
 builder.Services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
 
+builder.Services.AddScoped<IncidentService>();
+
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 
 builder.Services.AddOpenTelemetry()
