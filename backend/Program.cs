@@ -13,6 +13,10 @@ using OpenTelemetry.Trace;
 
 using backend.Data;
 using Microsoft.EntityFrameworkCore;
+using backend.Agents.Tools.Monitoring;
+using backend.Agents.Monitoring;
+using backend.Agents.Abstractions;
+using backend.Agents.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -175,6 +179,15 @@ builder.Services.AddHostedService<AnomalyIngestionWorker>();
 builder.Services.AddHostedService<KpiSnapshotWorker>();
 
 builder.Services.AddSingleton<Instrumentation>();
+builder.Services.AddSingleton<IEndpointProbeService, EndpointProbeService>();
+
+builder.Services.AddSingleton<MonitoringAgent>();
+
+builder.Services.AddSingleton<IAiOpsAgent>( sp => sp.GetRequiredService<MonitoringAgent>());
+
+builder.Services.AddSingleton<AgentRegistry>();
+
+builder.Services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 

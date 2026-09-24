@@ -1,4 +1,5 @@
-using System.Diagnostics;
+//using System.Diagnostics;
+using backend.Agents.Tools.Monitoring;
 using backend.Messaging;
 using backend.Models;
 using backend.Observability;
@@ -31,22 +32,40 @@ public sealed class MonitoringService : BackgroundService
     private readonly string metricsTopic;
     private readonly Instrumentation instrumentation;
 
-    public MonitoringService(
-        EndpointService endpointService,
-        IHttpClientFactory httpClientFactory,
-        ILogger<MonitoringService> logger,
-        KafkaProducerService kafkaProducer,
-        IOptions<KafkaOptions> kafkaOptions,
-        Instrumentation instrumentation)
-    {
-        this.endpointService = endpointService;
-        this.httpClientFactory = httpClientFactory;
-        this.logger = logger;
-        this.kafkaProducer = kafkaProducer;
-        metricsTopic = kafkaOptions.Value.MetricsTopic;
-        this.instrumentation = instrumentation;
-    }
+    private readonly IEndpointProbeService endpointProbeService;
 
+    // public MonitoringService(
+    //     EndpointService endpointService,
+    //     IHttpClientFactory httpClientFactory,
+    //     ILogger<MonitoringService> logger,
+    //     KafkaProducerService kafkaProducer,
+    //     IOptions<KafkaOptions> kafkaOptions,
+    //     Instrumentation instrumentation,
+    //     IEndpointProbeService endpointProbeService )
+    // {
+    //     this.endpointService = endpointService;
+    //     this.httpClientFactory = httpClientFactory;
+    //     this.logger = logger;
+    //     this.kafkaProducer = kafkaProducer;
+    //     metricsTopic = kafkaOptions.Value.MetricsTopic;
+    //     this.instrumentation = instrumentation;
+    //     this.endpointProbeService = endpointProbeService;
+    // }
+
+
+public MonitoringService(
+    EndpointService endpointService,
+    ILogger<MonitoringService> logger,
+    KafkaProducerService kafkaProducer,
+    IOptions<KafkaOptions> kafkaOptions,
+    IEndpointProbeService endpointProbeService)
+{
+    this.endpointService = endpointService;
+    this.logger = logger;
+    this.kafkaProducer = kafkaProducer;
+    metricsTopic = kafkaOptions.Value.MetricsTopic;
+    this.endpointProbeService = endpointProbeService;
+}
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
     {
@@ -94,109 +113,134 @@ public sealed class MonitoringService : BackgroundService
                     cancellationToken)));
     }
 
+    // private async Task ProbeAsync(
+    //     MonitoredEndpoint endpoint,
+    //     CancellationToken cancellationToken)
+    // {
+    //     var timestamp = DateTimeOffset.UtcNow;
+    //     var stopwatch = Stopwatch.StartNew();
+
+    //     var reachable = false;
+    //     var throughputMbps = 0d;
+
+    //     try
+    //     {
+    //         using var timeout =
+    //             CancellationTokenSource.CreateLinkedTokenSource(
+    //                 cancellationToken);
+
+    //         timeout.CancelAfter(RequestTimeout);
+
+    //         using var response =
+    //             await httpClientFactory
+    //                 .CreateClient()
+    //                 .GetAsync(
+    //                     endpoint.Url,
+    //                     HttpCompletionOption.ResponseHeadersRead,
+    //                     timeout.Token);
+
+    //         var body =
+    //             await response.Content.ReadAsByteArrayAsync(
+    //                 timeout.Token);
+
+    //         stopwatch.Stop();
+
+    //         reachable = response.IsSuccessStatusCode;
+
+    //         throughputMbps =
+    //             body.Length * 8d /
+    //             stopwatch.Elapsed.TotalSeconds /
+    //             1_000_000d;
+
+    //         // Persist only when status actually changes.
+    //         await endpointService.UpdateStatusAsync(
+    //             endpoint.Id,
+    //             reachable
+    //                 ? $"Healthy ({(int)response.StatusCode})"
+    //                 : $"Unhealthy ({(int)response.StatusCode})",
+    //             cancellationToken);
+    //     }
+    //     catch (HttpRequestException exception)
+    //     {
+    //         stopwatch.Stop();
+
+    //         logger.LogWarning(
+    //             exception,
+    //             "Probe failed for endpoint {EndpointId}.",
+    //             endpoint.Id);
+
+    //         // Persist only if previous status was not already Unavailable.
+    //         await endpointService.UpdateStatusAsync(
+    //             endpoint.Id,
+    //             "Unavailable",
+    //             cancellationToken);
+    //     }
+    //     catch (TaskCanceledException)
+    //         when (!cancellationToken.IsCancellationRequested)
+    //     {
+    //         stopwatch.Stop();
+
+    //         logger.LogWarning(
+    //             "Probe timed out for endpoint {EndpointId}.",
+    //             endpoint.Id);
+
+    //         // Persist only if previous status was not already Timeout.
+    //         await endpointService.UpdateStatusAsync(
+    //             endpoint.Id,
+    //             "Timeout",
+    //             cancellationToken);
+    //     }
+
+    //     instrumentation.ProbeLatencyHistogram.Record(
+    //         stopwatch.Elapsed.TotalMilliseconds,
+    //         new KeyValuePair<string, object?>(
+    //             "endpointId",
+    //             endpoint.Id.ToString()));
+
+    //     instrumentation.ProbeResultCounter.Add(
+    //         1,
+    //         new KeyValuePair<string, object?>(
+    //             "reachable",
+    //             reachable));
+
+    //     var metrics = new EndpointMetrics(
+    //         endpoint.Id,
+    //         timestamp,
+    //         Math.Round(
+    //             stopwatch.Elapsed.TotalMilliseconds,
+    //             2),
+    //         reachable ? 0 : 100,
+    //         reachable ? 100 : 0,
+    //         reachable ? 0 : 100,
+    //         Math.Round(
+    //             throughputMbps,
+    //             4),
+    //         reachable);
+
+    //     await kafkaProducer.PublishAsync(
+    //         metricsTopic,
+    //         endpoint.Id.ToString(),
+    //         metrics,
+    //         cancellationToken);
+    // }
+
     private async Task ProbeAsync(
-        MonitoredEndpoint endpoint,
-        CancellationToken cancellationToken)
+    MonitoredEndpoint endpoint,
+    CancellationToken cancellationToken)
     {
-        var timestamp = DateTimeOffset.UtcNow;
-        var stopwatch = Stopwatch.StartNew();
-
-        var reachable = false;
-        var throughputMbps = 0d;
-
-        try
-        {
-            using var timeout =
-                CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken);
-
-            timeout.CancelAfter(RequestTimeout);
-
-            using var response =
-                await httpClientFactory
-                    .CreateClient()
-                    .GetAsync(
-                        endpoint.Url,
-                        HttpCompletionOption.ResponseHeadersRead,
-                        timeout.Token);
-
-            var body =
-                await response.Content.ReadAsByteArrayAsync(
-                    timeout.Token);
-
-            stopwatch.Stop();
-
-            reachable = response.IsSuccessStatusCode;
-
-            throughputMbps =
-                body.Length * 8d /
-                stopwatch.Elapsed.TotalSeconds /
-                1_000_000d;
-
-            // Persist only when status actually changes.
-            await endpointService.UpdateStatusAsync(
-                endpoint.Id,
-                reachable
-                    ? $"Healthy ({(int)response.StatusCode})"
-                    : $"Unhealthy ({(int)response.StatusCode})",
-                cancellationToken);
-        }
-        catch (HttpRequestException exception)
-        {
-            stopwatch.Stop();
-
-            logger.LogWarning(
-                exception,
-                "Probe failed for endpoint {EndpointId}.",
-                endpoint.Id);
-
-            // Persist only if previous status was not already Unavailable.
-            await endpointService.UpdateStatusAsync(
-                endpoint.Id,
-                "Unavailable",
-                cancellationToken);
-        }
-        catch (TaskCanceledException)
-            when (!cancellationToken.IsCancellationRequested)
-        {
-            stopwatch.Stop();
-
-            logger.LogWarning(
-                "Probe timed out for endpoint {EndpointId}.",
-                endpoint.Id);
-
-            // Persist only if previous status was not already Timeout.
-            await endpointService.UpdateStatusAsync(
-                endpoint.Id,
-                "Timeout",
-                cancellationToken);
-        }
-
-        instrumentation.ProbeLatencyHistogram.Record(
-            stopwatch.Elapsed.TotalMilliseconds,
-            new KeyValuePair<string, object?>(
-                "endpointId",
-                endpoint.Id.ToString()));
-
-        instrumentation.ProbeResultCounter.Add(
-            1,
-            new KeyValuePair<string, object?>(
-                "reachable",
-                reachable));
+        var result = await endpointProbeService.ProbeAsync(
+            endpoint,
+            cancellationToken);
 
         var metrics = new EndpointMetrics(
             endpoint.Id,
-            timestamp,
-            Math.Round(
-                stopwatch.Elapsed.TotalMilliseconds,
-                2),
-            reachable ? 0 : 100,
-            reachable ? 100 : 0,
-            reachable ? 0 : 100,
-            Math.Round(
-                throughputMbps,
-                4),
-            reachable);
+            result.Timestamp,
+            result.LatencyMs,
+            result.Reachable ? 0 : 100,
+            result.Reachable ? 100 : 0,
+            result.Reachable ? 0 : 100,
+            result.ThroughputMbps,
+            result.Reachable);
 
         await kafkaProducer.PublishAsync(
             metricsTopic,
