@@ -23,7 +23,9 @@ public sealed class MonitoringDbContext : DbContext
     public DbSet<KpiSnapshot> KpiSnapshots => Set<KpiSnapshot>();
 
     public DbSet<Incident> Incidents => Set<Incident>();
-    
+
+    public DbSet<KnowledgeArticle> KnowledgeArticles => Set<KnowledgeArticle>();
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,8 +36,9 @@ public sealed class MonitoringDbContext : DbContext
         ConfigureDetectedAnomaly(modelBuilder);
         ConfigureKpiSnapshot(modelBuilder);
         ConfigureIncident(modelBuilder);
+        ConfigureKnowledgeArticle(modelBuilder);
 
-    
+
     }
 
     private static void ConfigureMonitoredEndpoint(ModelBuilder modelBuilder)
@@ -160,7 +163,7 @@ public sealed class MonitoringDbContext : DbContext
             .IsRequired();
 
         entity.HasIndex(x => x.Timestamp);
-    }       
+    }
 
     private static void ConfigureDetectedAnomaly(ModelBuilder modelBuilder)
     {
@@ -218,120 +221,219 @@ public sealed class MonitoringDbContext : DbContext
 
         entity.ToTable("incidents");
 
-    entity.HasKey(x => x.Id);
+        entity.HasKey(x => x.Id);
 
-    entity.Property(x => x.Id)
-        .HasColumnName("id");
+        entity.Property(x => x.Id)
+            .HasColumnName("id");
 
-    entity.Property(x => x.IncidentNumber)
-        .HasColumnName("incident_number")
-        .HasMaxLength(50)
-        .IsRequired();
+        entity.Property(x => x.IncidentNumber)
+            .HasColumnName("incident_number")
+            .HasMaxLength(50)
+            .IsRequired();
 
-    entity.HasIndex(x => x.IncidentNumber)
-        .IsUnique();
+        entity.HasIndex(x => x.IncidentNumber)
+            .IsUnique();
 
-    entity.Property(x => x.Title)
-        .HasColumnName("title")
-        .HasMaxLength(300)
-        .IsRequired();
+        entity.Property(x => x.Title)
+            .HasColumnName("title")
+            .HasMaxLength(300)
+            .IsRequired();
 
-    entity.Property(x => x.Description)
-        .HasColumnName("description");
+        entity.Property(x => x.Description)
+            .HasColumnName("description");
 
-    entity.Property(x => x.Source)
-        .HasColumnName("source")
-        .HasMaxLength(100)
-        .IsRequired();
+        entity.Property(x => x.Source)
+            .HasColumnName("source")
+            .HasMaxLength(100)
+            .IsRequired();
 
-    entity.Property(x => x.SourceType)
-        .HasColumnName("source_type")
-        .HasMaxLength(100)
-        .IsRequired();
+        entity.Property(x => x.SourceType)
+            .HasColumnName("source_type")
+            .HasMaxLength(100)
+            .IsRequired();
 
-    entity.Property(x => x.SourceId)
-        .HasColumnName("source_id");
+        entity.Property(x => x.SourceId)
+            .HasColumnName("source_id");
 
-    entity.Property(x => x.Target)
-        .HasColumnName("target")
-        .HasMaxLength(500)
-        .IsRequired();
+        entity.Property(x => x.Target)
+            .HasColumnName("target")
+            .HasMaxLength(500)
+            .IsRequired();
 
-    entity.Property(x => x.TargetType)
-        .HasColumnName("target_type")
-        .HasMaxLength(100)
-        .IsRequired();
+        entity.Property(x => x.TargetType)
+            .HasColumnName("target_type")
+            .HasMaxLength(100)
+            .IsRequired();
 
-    entity.Property(x => x.Severity)
-        .HasColumnName("severity")
-        .HasConversion<string>()
-        .HasMaxLength(20);
+        entity.Property(x => x.Severity)
+            .HasColumnName("severity")
+            .HasConversion<string>()
+            .HasMaxLength(20);
 
-    entity.Property(x => x.Status)
-        .HasColumnName("status")
-        .HasConversion<string>()
-        .HasMaxLength(30);
+        entity.Property(x => x.Status)
+            .HasColumnName("status")
+            .HasConversion<string>()
+            .HasMaxLength(30);
 
-    entity.Property(x => x.FailureType)
-        .HasColumnName("failure_type")
-        .HasConversion<string>()
-        .HasMaxLength(50);
+        entity.Property(x => x.FailureType)
+            .HasColumnName("failure_type")
+            .HasConversion<string>()
+            .HasMaxLength(50);
 
-    entity.Property(x => x.HttpStatusCode)
-        .HasColumnName("http_status_code");
+        entity.Property(x => x.HttpStatusCode)
+            .HasColumnName("http_status_code");
 
-    entity.Property(x => x.LatencyMs)
-        .HasColumnName("latency_ms");
+        entity.Property(x => x.LatencyMs)
+            .HasColumnName("latency_ms");
 
-    entity.Property(x => x.ErrorMessage)
-        .HasColumnName("error_message");
+        entity.Property(x => x.ErrorMessage)
+            .HasColumnName("error_message");
 
-    entity.Property(x => x.DetectedAt)
-        .HasColumnName("detected_at");
+        entity.Property(x => x.DetectedAt)
+            .HasColumnName("detected_at");
 
-    entity.Property(x => x.AcknowledgedAt)
-        .HasColumnName("acknowledged_at");
+        entity.Property(x => x.AcknowledgedAt)
+            .HasColumnName("acknowledged_at");
 
-    entity.Property(x => x.ResolvedAt)
-        .HasColumnName("resolved_at");
+        entity.Property(x => x.ResolvedAt)
+            .HasColumnName("resolved_at");
 
-    entity.Property(x => x.AssignedAgent)
-        .HasColumnName("assigned_agent")
-        .HasMaxLength(100);
+        entity.Property(x => x.AssignedAgent)
+            .HasColumnName("assigned_agent")
+            .HasMaxLength(100);
 
-    entity.Property(x => x.RootCause)
-        .HasColumnName("root_cause");
+        entity.Property(x => x.RootCause)
+            .HasColumnName("root_cause");
 
-    entity.Property(x => x.RecommendedAction)
-        .HasColumnName("recommended_action");
+        entity.Property(x => x.RecommendedAction)
+            .HasColumnName("recommended_action");
 
-    entity.Property(x => x.Resolution)
-        .HasColumnName("resolution");
+        entity.Property(x => x.Resolution)
+            .HasColumnName("resolution");
 
-    entity.Property(x => x.RequiresApproval)
-        .HasColumnName("requires_approval");
+        entity.Property(x => x.RequiresApproval)
+            .HasColumnName("requires_approval");
 
-    entity.Property(x => x.RemediationAttempted)
-        .HasColumnName("remediation_attempted");
+        entity.Property(x => x.RemediationAttempted)
+            .HasColumnName("remediation_attempted");
 
-    entity.Property(x => x.RemediationSuccessful)
-        .HasColumnName("remediation_successful");
+        entity.Property(x => x.RemediationSuccessful)
+            .HasColumnName("remediation_successful");
 
-    entity.Property(x => x.CreatedAt)
-        .HasColumnName("created_at");
+        entity.Property(x => x.CreatedAt)
+            .HasColumnName("created_at");
 
-    entity.Property(x => x.UpdatedAt)
-        .HasColumnName("updated_at");
+        entity.Property(x => x.UpdatedAt)
+            .HasColumnName("updated_at");
 
-    entity.HasIndex(x => new
+        entity.HasIndex(x => new
+        {
+            x.SourceId,
+            x.Status
+        });
+
+        entity.HasIndex(x => x.DetectedAt);
+
+        entity.HasIndex(x => x.Severity);
+
+    }
+
+    private void ConfigureKnowledgeArticle(ModelBuilder modelBuilder)
     {
-        x.SourceId,
-        x.Status
-    });
+        var entity = modelBuilder.Entity<KnowledgeArticle>();
 
-    entity.HasIndex(x => x.DetectedAt);
+        entity.ToTable("knowledge_articles");
 
-    entity.HasIndex(x => x.Severity);
+        entity.HasKey(x => x.Id);
 
-    }       
+        entity.Property(x => x.Id)
+            .HasColumnName("id");
+
+        entity.Property(x => x.ArticleNumber)
+            .HasColumnName("article_number")
+            .HasMaxLength(50)
+            .IsRequired();
+
+        entity.Property(x => x.Title)
+            .HasColumnName("title")
+            .HasMaxLength(250)
+            .IsRequired();
+
+        entity.Property(x => x.Description)
+            .HasColumnName("description")
+            .IsRequired();
+
+        entity.Property(x => x.Type)
+            .HasColumnName("type")
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        entity.Property(x => x.Target)
+            .HasColumnName("target")
+            .HasMaxLength(500);
+
+        entity.Property(x => x.TargetType)
+            .HasColumnName("target_type")
+            .HasMaxLength(100);
+
+        entity.Property(x => x.FailureType)
+            .HasColumnName("failure_type")
+            .HasMaxLength(100);
+
+        entity.Property(x => x.RootCause)
+            .HasColumnName("root_cause");
+
+        entity.Property(x => x.Resolution)
+            .HasColumnName("resolution");
+
+        entity.Property(x => x.RecommendedActions)
+            .HasColumnName("recommended_actions");
+
+        entity.Property(x => x.RunbookReference)
+            .HasColumnName("runbook_reference")
+            .HasMaxLength(500);
+
+        entity.Property(x => x.Tags)
+            .HasColumnName("tags")
+            .HasMaxLength(1000);
+
+        entity.Property(x => x.SourceIncidentId)
+            .HasColumnName("source_incident_id");
+
+        entity.Property(x => x.Confidence)
+            .HasColumnName("confidence");
+
+        entity.Property(x => x.TimesMatched)
+            .HasColumnName("times_matched");
+
+        entity.Property(x => x.TimesSuccessful)
+            .HasColumnName("times_successful");
+
+        entity.Property(x => x.IsActive)
+            .HasColumnName("is_active");
+
+        entity.Property(x => x.CreatedAt)
+            .HasColumnName("created_at");
+
+        entity.Property(x => x.UpdatedAt)
+            .HasColumnName("updated_at");
+
+        entity.Property(x => x.LastUsedAt)
+            .HasColumnName("last_used_at");
+
+        entity.HasIndex(x => x.ArticleNumber)
+            .IsUnique();
+
+        entity.HasIndex(x => x.Type);
+
+        entity.HasIndex(x => x.FailureType);
+
+        entity.HasIndex(x => x.Target);
+
+        entity.HasIndex(x => x.SourceIncidentId);
+
+        entity.HasIndex(x => x.IsActive);
+    }
+
 }

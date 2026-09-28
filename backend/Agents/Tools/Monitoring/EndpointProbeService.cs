@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using backend.Agents.Rca.Logging;
 using backend.Models;
 using backend.Observability;
 using backend.Services;
@@ -14,17 +15,20 @@ public sealed class EndpointProbeService : IEndpointProbeService
     private readonly EndpointService endpointService;
     private readonly Instrumentation instrumentation;
     private readonly ILogger<EndpointProbeService> logger;
+    private readonly InMemoryLogSearchService logSearchService;
 
     public EndpointProbeService(
         IHttpClientFactory httpClientFactory,
         EndpointService endpointService,
         Instrumentation instrumentation,
-        ILogger<EndpointProbeService> logger)
+        ILogger<EndpointProbeService> logger,
+        InMemoryLogSearchService logSearchService)
     {
         this.httpClientFactory = httpClientFactory;
         this.endpointService = endpointService;
         this.instrumentation = instrumentation;
         this.logger = logger;
+        this.logSearchService = logSearchService;
     }
 
     public async Task<EndpointProbeResult> ProbeAsync(
@@ -37,7 +41,7 @@ public sealed class EndpointProbeService : IEndpointProbeService
         var reachable = false;
         var throughputMbps = 0d;
         int? statusCode = null;
-        string status;
+        var status = string.Empty;
         string? errorMessage = null;
 
         try
@@ -67,7 +71,9 @@ public sealed class EndpointProbeService : IEndpointProbeService
 
             throughputMbps =
                 body.Length * 8d /
-                Math.Max(stopwatch.Elapsed.TotalSeconds, 0.001) /
+                Math.Max(
+                    stopwatch.Elapsed.TotalSeconds,
+                    0.001) /
                 1_000_000d;
 
             status = reachable
@@ -83,13 +89,27 @@ public sealed class EndpointProbeService : IEndpointProbeService
         {
             stopwatch.Stop();
 
+            timestamp = DateTimeOffset.UtcNow;
             status = "Unavailable";
             errorMessage = exception.Message;
 
+            logSearchService.Add(
+                new LogEntry
+                {
+                    Timestamp = timestamp,
+                    Level = "Error",
+                    Source = "EndpointProbeService",
+                    Target = endpoint.Url,
+                    Message = errorMessage,
+                    ExceptionType =
+                        exception.GetType().Name
+                });
+
             logger.LogWarning(
                 exception,
-                "Probe failed for endpoint {EndpointId}.",
-                endpoint.Id);
+                "Probe failed for endpoint {EndpointId} ({Url}).",
+                endpoint.Id,
+                endpoint.Url);
 
             await endpointService.UpdateStatusAsync(
                 endpoint.Id,
@@ -97,16 +117,42 @@ public sealed class EndpointProbeService : IEndpointProbeService
                 cancellationToken);
         }
         catch (TaskCanceledException)
-            when (!cancellationToken.IsCancellationRequested)
+            when (cancellationToken.IsCancellationRequested)
         {
             stopwatch.Stop();
 
+            logger.LogInformation(
+                "Probe cancelled for endpoint {EndpointId} ({Url}).",
+                endpoint.Id,
+                endpoint.Url);
+
+            throw;
+        }
+        catch (TaskCanceledException exception)
+        {
+            stopwatch.Stop();
+
+            timestamp = DateTimeOffset.UtcNow;
             status = "Timeout";
             errorMessage = "Endpoint probe timed out.";
 
+            logSearchService.Add(
+                new LogEntry
+                {
+                    Timestamp = timestamp,
+                    Level = "Error",
+                    Source = "EndpointProbeService",
+                    Target = endpoint.Url,
+                    Message = errorMessage,
+                    ExceptionType =
+                        exception.GetType().Name
+                });
+
             logger.LogWarning(
-                "Probe timed out for endpoint {EndpointId}.",
-                endpoint.Id);
+                exception,
+                "Probe timed out for endpoint {EndpointId} ({Url}).",
+                endpoint.Id,
+                endpoint.Url);
 
             await endpointService.UpdateStatusAsync(
                 endpoint.Id,

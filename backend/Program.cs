@@ -17,6 +17,12 @@ using backend.Agents.Tools.Monitoring;
 using backend.Agents.Monitoring;
 using backend.Agents.Abstractions;
 using backend.Agents.Core;
+using backend.Agents.Rca;
+using backend.Agents.Rca.Tools;
+using backend.Agents.Rca.Logging;
+using backend.Agents.Rca.Storage;
+using backend.Realtime;
+using backend.Agents.Knowledge;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,7 +45,7 @@ if (useDevAuth)
     swaggerTokenUrl = builder.Configuration["Authentication:DevSwaggerTokenUrl"];
     if (string.IsNullOrWhiteSpace(swaggerTokenUrl))
     {
-         swaggerTokenUrl = builder.Configuration["Swagger:TokenUrl"];
+        swaggerTokenUrl = builder.Configuration["Swagger:TokenUrl"];
     }
 }
 else if (string.IsNullOrWhiteSpace(authority) ||
@@ -183,13 +189,54 @@ builder.Services.AddSingleton<IEndpointProbeService, EndpointProbeService>();
 
 builder.Services.AddSingleton<MonitoringAgent>();
 
-builder.Services.AddSingleton<IAiOpsAgent>( sp => sp.GetRequiredService<MonitoringAgent>());
+builder.Services.AddSingleton<IAiOpsAgent>(sp => sp.GetRequiredService<MonitoringAgent>());
 
 builder.Services.AddSingleton<AgentRegistry>();
 
 builder.Services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
 
 builder.Services.AddScoped<IncidentService>();
+
+builder.Services.AddSingleton<RootCauseAnalysisService>();
+
+builder.Services.AddSingleton<RcaAgent>();
+
+builder.Services.AddSingleton<IAiOpsAgent>(sp => sp.GetRequiredService<RcaAgent>());
+
+builder.Services.AddSingleton<EndpointInvestigationTool>();
+
+builder.Services.AddSingleton<MetricsInvestigationTool>();
+
+builder.Services.AddSingleton<LogInvestigationTool>();
+
+builder.Services.AddSingleton<IInvestigationTool>(
+    sp => sp.GetRequiredService<EndpointInvestigationTool>());
+
+builder.Services.AddSingleton<IInvestigationTool>(
+    sp => sp.GetRequiredService<MetricsInvestigationTool>());
+
+builder.Services.AddSingleton<IInvestigationTool>(
+    sp => sp.GetRequiredService<LogInvestigationTool>());
+
+builder.Services.AddSingleton<InMemoryLogSearchService>();
+
+builder.Services.AddSingleton<ILogSearchService>(
+    sp => sp.GetRequiredService<InMemoryLogSearchService>());
+
+builder.Services.AddSingleton<IAiOpsEventPublisher, SignalRAiOpsEventPublisher>();
+
+builder.Services.AddScoped<KnowledgeMatchingService>();
+
+builder.Services.AddSingleton<KnowledgeAgent>();
+
+builder.Services.AddSingleton<IAiOpsAgent>(sp => sp.GetRequiredService<KnowledgeAgent>());
+
+builder.Services.AddScoped<KnowledgeBaseService>();
+
+builder.Services.AddScoped<IncidentLearningService>();
+
+
+builder.Services.AddSingleton<IRcaResultStore, InMemoryRcaResultStore>();
 
 var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 
@@ -247,7 +294,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
 app.MapHub<MetricsHub>("/hubs/metrics");
+app.MapHub<AiOpsHub>("/hubs/aiops");
 app.MapPrometheusScrapingEndpoint();
 
 app.Run();

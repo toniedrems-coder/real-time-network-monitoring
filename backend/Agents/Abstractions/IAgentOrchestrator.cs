@@ -8,4 +8,9 @@ public interface IAgentOrchestrator
         string agentId,
         AgentContext context,
         CancellationToken cancellationToken = default);
+
+    Task<AgentResult> ExecuteInvestigationAsync(
+    AgentContext context,
+    CancellationToken cancellationToken = default);
 }
+

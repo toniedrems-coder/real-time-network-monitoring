@@ -146,4 +146,54 @@ public sealed class IncidentService
 
         return incident;
     }
+
+    public async Task<Incident?> StartInvestigationAsync(
+    Guid id,
+    string agentName,
+    CancellationToken cancellationToken = default)
+    {
+        var incident =
+            await dbContext.Incidents
+                .FirstOrDefaultAsync(
+                    x => x.Id == id,
+                    cancellationToken);
+
+        if (incident is null)
+            return null;
+
+        incident.Status = IncidentStatus.Investigating;
+        incident.AssignedAgent = agentName;
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        return incident;
+    }
+
+    public async Task UpdateRcaAsync(
+        Guid incidentId,
+        string rootCause,
+        string recommendedAction,
+        CancellationToken cancellationToken = default)
+    {
+        var incident =
+            await dbContext.Incidents
+                .FirstOrDefaultAsync(
+                    x => x.Id == incidentId,
+                    cancellationToken);
+
+        if (incident is null)
+            return;
+
+        incident.RootCause = rootCause;
+        incident.RecommendedAction = recommendedAction;
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(
+            cancellationToken);
+    }
+
+
+
 }

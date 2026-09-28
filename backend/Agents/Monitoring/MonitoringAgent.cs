@@ -22,9 +22,9 @@ public class MonitoringAgent : IAiOpsAgent
         IEndpointProbeService endpointProbeService,
         IServiceScopeFactory scopeFactory)
     {
-        _logger = logger;   
+        _logger = logger;
         this.endpointService = endpointService;
-        this.endpointProbeService = endpointProbeService;   
+        this.endpointProbeService = endpointProbeService;
         this.scopeFactory = scopeFactory;
     }
 
@@ -43,6 +43,7 @@ public class MonitoringAgent : IAiOpsAgent
     public async Task<AgentResult> ExecuteAsync(AgentContext context, CancellationToken cancellationToken = default)
     {
         var startedAt = DateTimeOffset.UtcNow;
+        Status = AgentStatus.Executing;
 
         try
         {
@@ -126,23 +127,23 @@ public class MonitoringAgent : IAiOpsAgent
                 }
             }
 
-        var data = new Dictionary<string, object>
-{
-    ["totalEndpoints"] = results.Length,
+            var data = new Dictionary<string, object>
+            {
+                ["totalEndpoints"] = results.Length,
 
-    ["healthyEndpoints"] =
-        results.Count(x => x.Reachable),
+                ["healthyEndpoints"] =
+            results.Count(x => x.Reachable),
 
-    ["unhealthyEndpoints"] =
-        unhealthy.Count,
+                ["unhealthyEndpoints"] =
+            unhealthy.Count,
 
-    ["incidentsCreatedOrUpdated"] =
-        incidents.Count,
+                ["incidentsCreatedOrUpdated"] =
+            incidents.Count,
 
-    ["results"] = results,
+                ["results"] = results,
 
-    ["incidents"] = incidents
-};
+                ["incidents"] = incidents
+            };
 
             var message = unhealthy.Count == 0
                 ? $"All {results.Length} monitored endpoints are healthy."
@@ -153,17 +154,35 @@ public class MonitoringAgent : IAiOpsAgent
                 message,
                 startedAt,
                 data);
+
+            // return AgentResult.Successful(
+            // Name,
+            // message,
+            // startedAt,
+            // DateTimeOffset.UtcNow,
+            // data);
         }
         catch (Exception ex)
         {
             Status = AgentStatus.Failed;
 
-            _logger.LogError( ex, "Monitoring Agent failed.");
+            _logger.LogError(ex, "Monitoring Agent failed.");
 
             return AgentResult.Failed(
                 Name,
                 ex.Message,
                 startedAt);
+
+            //     logger.LogError(
+            //     exception,
+            //     "{AgentName} execution failed.",
+            //     Name);
+
+            // return AgentResult.Failed(
+            //     Name,
+            //     exception.Message,
+            //     startedAt,
+            //     DateTimeOffset.UtcNow);
         }
         finally
         {
@@ -176,57 +195,57 @@ public class MonitoringAgent : IAiOpsAgent
 
     private static FailureType DetermineFailureType(
     EndpointProbeResult result)
-{
-    if (result.Status.Equals(
-        "Timeout",
-        StringComparison.OrdinalIgnoreCase))
     {
-        return FailureType.Timeout;
+        if (result.Status.Equals(
+            "Timeout",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureType.Timeout;
+        }
+
+        if (result.Status.Equals(
+            "Unavailable",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureType.Unavailable;
+        }
+
+        if (result.StatusCode.HasValue &&
+            result.StatusCode.Value >= 400)
+        {
+            return FailureType.HttpError;
+        }
+
+        return FailureType.Unknown;
     }
 
-    if (result.Status.Equals(
-        "Unavailable",
-        StringComparison.OrdinalIgnoreCase))
+    private static IncidentSeverity DetermineSeverity(
+        EndpointProbeResult result)
     {
-        return FailureType.Unavailable;
+        if (result.StatusCode is >= 500)
+        {
+            return IncidentSeverity.P2;
+        }
+
+        if (result.Status.Equals(
+            "Timeout",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return IncidentSeverity.P2;
+        }
+
+        if (result.Status.Equals(
+            "Unavailable",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return IncidentSeverity.P2;
+        }
+
+        if (result.StatusCode is >= 400)
+        {
+            return IncidentSeverity.P3;
+        }
+
+        return IncidentSeverity.P4;
     }
-
-    if (result.StatusCode.HasValue &&
-        result.StatusCode.Value >= 400)
-    {
-        return FailureType.HttpError;
-    }
-
-    return FailureType.Unknown;
-}
-
-private static IncidentSeverity DetermineSeverity(
-    EndpointProbeResult result)
-{
-    if (result.StatusCode is >= 500)
-    {
-        return IncidentSeverity.P2;
-    }
-
-    if (result.Status.Equals(
-        "Timeout",
-        StringComparison.OrdinalIgnoreCase))
-    {
-        return IncidentSeverity.P2;
-    }
-
-    if (result.Status.Equals(
-        "Unavailable",
-        StringComparison.OrdinalIgnoreCase))
-    {
-        return IncidentSeverity.P2;
-    }
-
-    if (result.StatusCode is >= 400)
-    {
-        return IncidentSeverity.P3;
-    }
-
-    return IncidentSeverity.P4;
-}
 }

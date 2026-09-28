@@ -98,3 +98,15 @@ Separate workflows build and validate each project when its files change:
 
 - `.github/workflows/backend.yml`
 - `.github/workflows/frontend.yml`
+
+
+
+------------------------------------------
+
+From your project's root folder, this one-liner will start both your main infrastructure and observability containers:
+
+docker compose -f infrastructure\docker-compose.yml up -d && docker compose -f docker-compose.observability.yml up -d
+
+Then verify everything with:
+
+
