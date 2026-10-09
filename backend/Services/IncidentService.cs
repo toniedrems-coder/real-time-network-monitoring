@@ -120,10 +120,25 @@ public sealed class IncidentService
     }
 
     public async Task<Incident?> ResolveAsync(
-        Guid id,
-        string resolution,
-        CancellationToken cancellationToken = default)
+    Guid id,
+    string resolution,
+    CancellationToken cancellationToken = default)
     {
+        // ---------------------------------------------
+        // 1. Validate resolution
+        // ---------------------------------------------
+
+        if (string.IsNullOrWhiteSpace(resolution))
+        {
+            throw new ArgumentException(
+                "Resolution is required.",
+                nameof(resolution));
+        }
+
+        // ---------------------------------------------
+        // 2. Load incident
+        // ---------------------------------------------
+
         var incident =
             await dbContext.Incidents
                 .FirstOrDefaultAsync(
@@ -131,18 +146,59 @@ public sealed class IncidentService
                     cancellationToken);
 
         if (incident is null)
+        {
             return null;
+        }
 
-        incident.Status = IncidentStatus.Resolved;
-        incident.Resolution = resolution;
-        incident.ResolvedAt = DateTimeOffset.UtcNow;
-        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        // ---------------------------------------------
+        // 3. Idempotency
+        //
+        // Don't resolve an already resolved incident
+        // again or overwrite its original resolution.
+        // ---------------------------------------------
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        if (incident.Status == IncidentStatus.Resolved)
+        {
+            logger.LogInformation(
+                "Incident {IncidentNumber} is already resolved.",
+                incident.IncidentNumber);
+
+            return incident;
+        }
+
+        // ---------------------------------------------
+        // 4. Resolve incident
+        // ---------------------------------------------
+
+        var now = DateTimeOffset.UtcNow;
+
+        incident.Status =
+            IncidentStatus.Resolved;
+
+        incident.Resolution =
+            resolution.Trim();
+
+        incident.ResolvedAt =
+            now;
+
+        incident.UpdatedAt =
+            now;
+
+        // ---------------------------------------------
+        // 5. Persist
+        // ---------------------------------------------
+
+        await dbContext.SaveChangesAsync(
+            cancellationToken);
 
         logger.LogInformation(
-            "Incident {IncidentNumber} resolved.",
-            incident.IncidentNumber);
+            "Incident {IncidentNumber} resolved at {ResolvedAt}.",
+            incident.IncidentNumber,
+            incident.ResolvedAt);
+
+        // ---------------------------------------------
+        // 6. Return resolved incident
+        // ---------------------------------------------
 
         return incident;
     }

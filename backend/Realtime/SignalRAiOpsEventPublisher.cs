@@ -104,6 +104,20 @@ public sealed class SignalRAiOpsEventPublisher
             cancellationToken);
     }
 
+    public Task WorkflowUpdatedAsync(
+        object workflow,
+        CancellationToken cancellationToken = default)
+    {
+        return SendAsync("WorkflowUpdated", workflow, cancellationToken);
+    }
+
+    public Task RemediationUpdatedAsync(
+        object remediation,
+        CancellationToken cancellationToken = default)
+    {
+        return SendAsync("RemediationUpdated", remediation, cancellationToken);
+    }
+
     private Task SendAsync<T>(
         string eventName,
         T payload,

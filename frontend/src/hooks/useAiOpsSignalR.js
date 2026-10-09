@@ -16,6 +16,8 @@ const AIOPS_EVENTS = [
   "RcaStarted",
   "RcaCompleted",
   "RcaFailed",
+  "WorkflowUpdated",
+  "RemediationUpdated",
 ];
 
 export default function useAiOpsSignalR(

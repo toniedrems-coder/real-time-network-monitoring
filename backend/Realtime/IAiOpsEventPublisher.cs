@@ -37,4 +37,12 @@ public interface IAiOpsEventPublisher
     Task RcaFailedAsync(
         RcaEvent @event,
         CancellationToken cancellationToken = default);
+
+    Task WorkflowUpdatedAsync(
+        object workflow,
+        CancellationToken cancellationToken = default);
+
+    Task RemediationUpdatedAsync(
+        object remediation,
+        CancellationToken cancellationToken = default);
 }

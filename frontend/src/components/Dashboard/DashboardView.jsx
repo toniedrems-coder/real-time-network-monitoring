@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import { Link } from "react-router-dom";
 import AnomalyList from "./AnomalyList";
 import EndpointCard from "./EndpointCard";
 import KpiTrendChart from "./KpiTrendChart";
@@ -86,17 +87,20 @@ export default function DashboardView() {
 
   if (error) return <main className="page"><p className="error">{error}</p></main>;
   if (!dashboard) return <main className="page"><p>Loading dashboard...</p></main>;
+  const reportsLink = selectedEndpointId ? `/reports?endpointId=${selectedEndpointId}` : "/reports";
+  const riskyEndpoint = dashboard.endpoints?.find((endpoint) => endpoint.anomalyCount > 0);
+  const atRiskLink = riskyEndpoint ? `/reports?endpointId=${riskyEndpoint.endpointId}` : "/reports";
   return (
     <main className="page">
       <div className="page-heading"><div><p className="eyebrow">Live overview</p><h1>Network dashboard</h1></div></div>
       <section className="kpi-grid" aria-label="Key performance indicators">
-        <Kpi label="Monitored endpoints" value={dashboard.totalEndpoints} />
-        <Kpi label="Healthy endpoints" value={`${dashboard.healthyEndpoints} (${dashboard.healthyPercent.toFixed(1)}%)`} tone="good" />
-        <Kpi label="Active anomalies" value={dashboard.activeAnomalies} tone="warning" />
-        <Kpi label="Anomalies / hour" value={dashboard.anomalyRatePerHour} tone="warning" />
-        <Kpi label="Avg latency" value={`${dashboard.averageLatencyMs.toFixed(1)} ms`} />
-        <Kpi label="p95 latency" value={`${dashboard.p95LatencyMs.toFixed(1)} ms`} />
-        <Kpi label="Endpoints at risk" value={dashboard.endpointsAtRisk} tone={dashboard.endpointsAtRisk > 0 ? "warning" : "good"} />
+        <Kpi label="Monitored endpoints" value={dashboard.totalEndpoints} to="/endpoints" />
+        <Kpi label="Healthy endpoints" value={`${dashboard.healthyEndpoints} (${dashboard.healthyPercent.toFixed(1)}%)`} to="/endpoints" tone="good" />
+        <Kpi label="Active anomalies" value={dashboard.activeAnomalies} to="/incidents" tone="warning" />
+        <Kpi label="Anomalies / hour" value={dashboard.anomalyRatePerHour} to="/incidents" tone="warning" />
+        <Kpi label="Avg latency" value={`${dashboard.averageLatencyMs.toFixed(1)} ms`} to={reportsLink} />
+        <Kpi label="p95 latency" value={`${dashboard.p95LatencyMs.toFixed(1)} ms`} to={reportsLink} />
+        <Kpi label="Endpoints at risk" value={dashboard.endpointsAtRisk} to={atRiskLink} tone={dashboard.endpointsAtRisk > 0 ? "warning" : "good"} />
       </section>
       <ReportExport />
       <section className="content-grid">
@@ -119,8 +123,12 @@ export default function DashboardView() {
   );
 }
 
-function Kpi({ label, value, tone = "" }) {
-  return <div className={`kpi-card ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
+function Kpi({ label, value, to, tone = "" }) {
+  return (
+    <Link className={`kpi-card clickable ${tone}`} to={to} aria-label={`${label}: ${value}. View details`}>
+      <span>{label}</span><strong>{value}</strong>
+    </Link>
+  );
 }
 
 function assertResponse(response) {

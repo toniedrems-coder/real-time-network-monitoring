@@ -43,4 +43,9 @@ public sealed class KnowledgeArticle
     public DateTimeOffset UpdatedAt { get; set; }
 
     public DateTimeOffset? LastUsedAt { get; set; }
+
+    public ICollection<IncidentKnowledgeMatch>
+    IncidentMatches
+    { get; set; }
+        = new List<IncidentKnowledgeMatch>();
 }

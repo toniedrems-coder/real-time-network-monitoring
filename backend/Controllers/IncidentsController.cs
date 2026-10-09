@@ -9,11 +9,14 @@ namespace backend.Controllers;
 public sealed class IncidentsController : ControllerBase
 {
     private readonly IncidentService incidentService;
+    private readonly IncidentResolutionService _incidentResolutionService;
 
     public IncidentsController(
-        IncidentService incidentService)
+        IncidentService incidentService,
+        IncidentResolutionService incidentResolutionService)
     {
         this.incidentService = incidentService;
+        _incidentResolutionService = incidentResolutionService;
     }
 
     [HttpGet]
@@ -61,19 +64,28 @@ public sealed class IncidentsController : ControllerBase
         [FromBody] ResolveIncidentRequest request,
         CancellationToken cancellationToken)
     {
-        var incident =
-            await incidentService.ResolveAsync(
+        if (string.IsNullOrWhiteSpace(request.Resolution))
+        {
+            return BadRequest(new
+            {
+                message = "Resolution is required."
+            });
+        }
+
+        var result =
+            await _incidentResolutionService.ResolveAsync(
                 id,
-                request.Resolution,
+                request,
                 cancellationToken);
 
-        return incident is null
-            ? NotFound()
-            : Ok(incident);
+        if (result is null)
+        {
+            return NotFound(new
+            {
+                message = "Incident not found."
+            });
+        }
+
+        return Ok(result);
     }
 }
-
-public sealed record ResolveIncidentRequest(
-    string Resolution);
-
-    

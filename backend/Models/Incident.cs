@@ -55,4 +55,8 @@ public sealed class Incident
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public ICollection<IncidentKnowledgeMatch> KnowledgeMatches { get; set; } = new List<IncidentKnowledgeMatch>();
+
+    public ICollection<RemediationAction> RemediationActions { get; set; } = new List<RemediationAction>();
 }

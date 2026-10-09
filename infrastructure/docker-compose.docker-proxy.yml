@@ -1,0 +1,25 @@
+# Development-only, read-only Docker API proxy for the Containers page.
+# Only GET requests to container endpoints are allowed; it is bound to loopback.
+#   docker compose -f infrastructure/docker-compose.docker-proxy.yml up -d
+name: network-monitor-docker-proxy
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: network-monitor-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      POST: 0
+      INFO: 0
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+      SERVICES: 0
+      TASKS: 0
+      SECRETS: 0
+      AUTH: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:23750:2375"

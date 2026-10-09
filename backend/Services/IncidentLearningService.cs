@@ -9,18 +9,18 @@ public sealed class IncidentLearningService
 {
     private readonly MonitoringDbContext _dbContext;
     private readonly KnowledgeBaseService _knowledgeBaseService;
-    private readonly KnowledgeMatchingService _knowledgeMatchingService;
     private readonly ILogger<IncidentLearningService> _logger;
+    private readonly IncidentKnowledgeMatchService _matchService;
 
     public IncidentLearningService(
         MonitoringDbContext dbContext,
         KnowledgeBaseService knowledgeBaseService,
-        KnowledgeMatchingService knowledgeMatchingService,
+        IncidentKnowledgeMatchService matchService,
         ILogger<IncidentLearningService> logger)
     {
         _dbContext = dbContext;
         _knowledgeBaseService = knowledgeBaseService;
-        _knowledgeMatchingService = knowledgeMatchingService;
+        _matchService = matchService;
         _logger = logger;
     }
 
@@ -39,6 +39,8 @@ public sealed class IncidentLearningService
                     x => x.Id == incidentId,
                     cancellationToken);
 
+        // IMPORTANT:
+        // Null check must happen BEFORE incident.Id is used.
         if (incident is null)
         {
             return new IncidentLearningResult
@@ -71,11 +73,10 @@ public sealed class IncidentLearningService
         }
 
         // -------------------------------------------------
-        // 3. We need RCA/root cause
+        // 3. Root cause is required
         // -------------------------------------------------
 
-        if (string.IsNullOrWhiteSpace(
-                incident.RootCause))
+        if (string.IsNullOrWhiteSpace(incident.RootCause))
         {
             return new IncidentLearningResult
             {
@@ -90,11 +91,10 @@ public sealed class IncidentLearningService
         }
 
         // -------------------------------------------------
-        // 4. We need an actual resolution
+        // 4. Resolution is required
         // -------------------------------------------------
 
-        if (string.IsNullOrWhiteSpace(
-                incident.Resolution))
+        if (string.IsNullOrWhiteSpace(incident.Resolution))
         {
             return new IncidentLearningResult
             {
@@ -109,36 +109,30 @@ public sealed class IncidentLearningService
         }
 
         // -------------------------------------------------
-        // 5. Search existing knowledge
+        // 5. Load the ACTUAL persisted selected KB match
         // -------------------------------------------------
 
-        var searchResult =
-            await _knowledgeMatchingService
-                .SearchAsync(
-                    incident,
+        var selectedMatch =
+            await _matchService
+                .GetSelectedMatchAsync(
+                    incident.Id,
                     cancellationToken);
 
-        var bestMatch =
-            searchResult.BestMatch;
-
         // -------------------------------------------------
-        // 6. Existing strong match
+        // 6. Selected knowledge was verified successful
         // -------------------------------------------------
 
-        // We deliberately use a reasonably strong threshold
-        // before treating existing knowledge as successful.
-        if (bestMatch is not null &&
-            bestMatch.MatchScore >= 0.65)
+        if (selectedMatch is not null &&
+            selectedMatch.WasSuccessful == true &&
+            selectedMatch.KnowledgeArticle is not null)
         {
             var article =
-                await _dbContext.KnowledgeArticles
-                    .FirstOrDefaultAsync(
-                        x =>
-                            x.Id ==
-                            bestMatch.ArticleId,
-                        cancellationToken);
+                selectedMatch.KnowledgeArticle;
 
-            if (article is not null)
+            var alreadyApplied =
+                selectedMatch.LearningAppliedAt.HasValue;
+
+            if (!alreadyApplied)
             {
                 article.TimesSuccessful++;
 
@@ -148,50 +142,110 @@ public sealed class IncidentLearningService
                 article.UpdatedAt =
                     DateTimeOffset.UtcNow;
 
+                selectedMatch.LearningAppliedAt =
+                    DateTimeOffset.UtcNow;
+
+                selectedMatch.UpdatedAt =
+                    DateTimeOffset.UtcNow;
+
                 await _dbContext
                     .SaveChangesAsync(
                         cancellationToken);
 
                 _logger.LogInformation(
-                    "Incident {IncidentNumber} reinforced knowledge article {ArticleNumber}.",
+                    "Incident {IncidentNumber} successfully reinforced knowledge article {ArticleNumber}.",
                     incident.IncidentNumber,
                     article.ArticleNumber);
-
-                return new IncidentLearningResult
-                {
-                    IncidentId =
-                        incident.Id,
-
-                    IncidentNumber =
-                        incident.IncidentNumber,
-
-                    Learned = true,
-
-                    ExistingKnowledgeUpdated =
-                        true,
-
-                    NewKnowledgeCreated =
-                        false,
-
-                    KnowledgeArticleId =
-                        article.Id,
-
-                    ArticleNumber =
-                        article.ArticleNumber,
-
-                    ArticleType =
-                        article.Type,
-
-                    Message =
-                        "Existing operational knowledge was reinforced by the resolved incident."
-                };
             }
+            else
+            {
+                _logger.LogInformation(
+                    "Learning was already applied for incident {IncidentNumber} and knowledge article {ArticleNumber}.",
+                    incident.IncidentNumber,
+                    article.ArticleNumber);
+            }
+
+            return new IncidentLearningResult
+            {
+                IncidentId = incident.Id,
+                IncidentNumber = incident.IncidentNumber,
+
+                Learned = true,
+
+                // True only when this invocation changed the KB.
+                ExistingKnowledgeUpdated = !alreadyApplied,
+
+                NewKnowledgeCreated = false,
+
+                KnowledgeArticleId = article.Id,
+                ArticleNumber = article.ArticleNumber,
+                ArticleType = article.Type,
+
+                Message =
+                    alreadyApplied
+                        ? "Learning had already been applied for this incident."
+                        : "Verified knowledge was reinforced from the resolved incident."
+            };
         }
 
         // -------------------------------------------------
-        // 7. No suitable existing knowledge
-        //
-        // Create a new IncidentLearning article.
+        // 7. Selected knowledge explicitly failed
+        // -------------------------------------------------
+
+        if (selectedMatch is not null &&
+            selectedMatch.WasSuccessful == false)
+        {
+            _logger.LogInformation(
+                "Knowledge article {KnowledgeArticleId} did not resolve incident {IncidentNumber}. Capturing the actual resolution as new learning.",
+                selectedMatch.KnowledgeArticleId,
+                incident.IncidentNumber);
+
+            // Do NOT return.
+            // Continue below and capture the actual resolution.
+        }
+
+        // -------------------------------------------------
+        // 8. Prevent duplicate IncidentLearning articles
+        // -------------------------------------------------
+
+        var existingLearning =
+            await _dbContext.KnowledgeArticles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    x =>
+                        x.SourceIncidentId == incident.Id &&
+                        x.Type ==
+                            KnowledgeArticleType.IncidentLearning,
+                    cancellationToken);
+
+        if (existingLearning is not null)
+        {
+            return new IncidentLearningResult
+            {
+                IncidentId = incident.Id,
+                IncidentNumber = incident.IncidentNumber,
+                Learned = true,
+
+                ExistingKnowledgeUpdated = false,
+                NewKnowledgeCreated = false,
+
+                KnowledgeArticleId =
+                    existingLearning.Id,
+
+                ArticleNumber =
+                    existingLearning.ArticleNumber,
+
+                ArticleType =
+                    existingLearning.Type,
+
+                Message =
+                    "Incident learning has already been captured."
+            };
+        }
+
+        // -------------------------------------------------
+        // 9. No verified successful existing knowledge.
+        //    Capture actual incident resolution.
         // -------------------------------------------------
 
         var request =
@@ -246,24 +300,17 @@ public sealed class IncidentLearningService
             incident.IncidentNumber);
 
         // -------------------------------------------------
-        // 8. Return learning result
+        // 10. Return learning result
         // -------------------------------------------------
 
         return new IncidentLearningResult
         {
-            IncidentId =
-                incident.Id,
-
-            IncidentNumber =
-                incident.IncidentNumber,
-
+            IncidentId = incident.Id,
+            IncidentNumber = incident.IncidentNumber,
             Learned = true,
 
-            ExistingKnowledgeUpdated =
-                false,
-
-            NewKnowledgeCreated =
-                true,
+            ExistingKnowledgeUpdated = false,
+            NewKnowledgeCreated = true,
 
             KnowledgeArticleId =
                 createdArticle.Id,
@@ -278,7 +325,6 @@ public sealed class IncidentLearningService
                 "New operational knowledge was created from the resolved incident."
         };
     }
-
     private static string BuildTags(
         Incident incident)
     {

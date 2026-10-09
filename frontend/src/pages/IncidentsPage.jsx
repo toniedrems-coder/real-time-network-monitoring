@@ -33,6 +33,8 @@ import {
 
 import "./IncidentsPage.css";
 
+const PAGE_SIZE = 10;
+
 function IncidentsPage() {
   const navigate = useNavigate();
 
@@ -163,6 +165,30 @@ function IncidentsPage() {
       statusFilter,
       severityFilter,
     ]);
+
+  // =========================================================
+  // Pagination
+  // =========================================================
+
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, severityFilter]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredIncidents.length / PAGE_SIZE)
+  );
+  const safePage = Math.min(page, totalPages);
+  const pagedIncidents = useMemo(
+    () =>
+      filteredIncidents.slice(
+        (safePage - 1) * PAGE_SIZE,
+        safePage * PAGE_SIZE
+      ),
+    [filteredIncidents, safePage]
+  );
 
   // =========================================================
   // Dashboard statistics
@@ -690,7 +716,7 @@ function IncidentsPage() {
 
               <tbody>
 
-                {filteredIncidents.map(
+                {pagedIncidents.map(
                   (incident) => {
 
                     const severity =
@@ -875,6 +901,31 @@ function IncidentsPage() {
               </tbody>
 
             </table>
+
+            <div className="pagination">
+              <button
+                type="button"
+                className="pagination-button"
+                disabled={safePage === 1}
+                onClick={() => setPage(safePage - 1)}
+              >
+                Previous
+              </button>
+
+              <span className="pagination-info">
+                Page {safePage} of {totalPages} ·{" "}
+                {filteredIncidents.length} incidents
+              </span>
+
+              <button
+                type="button"
+                className="pagination-button"
+                disabled={safePage === totalPages}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Next
+              </button>
+            </div>
 
           </div>
 

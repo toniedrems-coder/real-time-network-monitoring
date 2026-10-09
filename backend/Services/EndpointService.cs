@@ -171,53 +171,53 @@ public sealed class EndpointService
     // STATUS
     // ---------------------------------------------------------
 
-public async Task<MonitoredEndpoint?> UpdateStatusAsync(
-    Guid id,
-    string status,
-    CancellationToken cancellationToken = default)
-{
-    if (!endpoints.TryGetValue(id, out var existing))
+    public async Task<MonitoredEndpoint?> UpdateStatusAsync(
+        Guid id,
+        string status,
+        CancellationToken cancellationToken = default)
     {
-        return null;
+        if (!endpoints.TryGetValue(id, out var existing))
+        {
+            return null;
+        }
+
+        // Do nothing when the status has not changed.
+        // This prevents a PostgreSQL UPDATE on every probe.
+        if (string.Equals(
+            existing.Status,
+            status,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return existing;
+        }
+
+        var updated = existing with
+        {
+            Status = status
+        };
+
+        using var scope = scopeFactory.CreateScope();
+
+        var repository =
+            scope.ServiceProvider
+                .GetRequiredService<IEndpointRepository>();
+
+        // Persist first.
+        await repository.UpdateAsync(
+            updated,
+            cancellationToken);
+
+        // Update runtime cache only after PostgreSQL succeeds.
+        endpoints[id] = updated;
+
+        logger.LogInformation(
+            "Endpoint {EndpointId} status changed from {OldStatus} to {NewStatus}.",
+            id,
+            existing.Status,
+            status);
+
+        return updated;
     }
-
-    // Do nothing when the status has not changed.
-    // This prevents a PostgreSQL UPDATE on every probe.
-    if (string.Equals(
-        existing.Status,
-        status,
-        StringComparison.OrdinalIgnoreCase))
-    {
-        return existing;
-    }
-
-    var updated = existing with
-    {
-        Status = status
-    };
-
-    using var scope = scopeFactory.CreateScope();
-
-    var repository =
-        scope.ServiceProvider
-            .GetRequiredService<IEndpointRepository>();
-
-    // Persist first.
-    await repository.UpdateAsync(
-        updated,
-        cancellationToken);
-
-    // Update runtime cache only after PostgreSQL succeeds.
-    endpoints[id] = updated;
-
-    logger.LogInformation(
-        "Endpoint {EndpointId} status changed from {OldStatus} to {NewStatus}.",
-        id,
-        existing.Status,
-        status);
-
-    return updated;
-}
 
 
     // ---------------------------------------------------------

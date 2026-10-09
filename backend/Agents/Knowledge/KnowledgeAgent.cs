@@ -92,6 +92,11 @@ public sealed class KnowledgeAgent : IAiOpsAgent
                     incidentId,
                     cancellationToken);
 
+            var matchPersistenceService =
+                scope.ServiceProvider
+                    .GetRequiredService<
+                        IncidentKnowledgeMatchService>();
+
             if (incident is null)
             {
                 return AgentResult.Failed(
@@ -188,4 +193,7 @@ public sealed class KnowledgeAgent : IAiOpsAgent
             }
         }
     }
+
+
+
 }

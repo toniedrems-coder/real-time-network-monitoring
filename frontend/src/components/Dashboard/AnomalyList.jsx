@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const PAGE_SIZE = 10;
 
 export default function AnomalyList({ anomalies = [] }) {
+  const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
 
   const totalPages = Math.max(
@@ -54,8 +56,17 @@ export default function AnomalyList({ anomalies = [] }) {
           <div className="list">
             {paginatedAnomalies.map((anomaly) => (
               <div
-                className="anomaly-card"
+                className={`anomaly-card${anomaly.endpointId ? " clickable" : ""}`}
                 key={anomaly.id}
+                role={anomaly.endpointId ? "link" : undefined}
+                tabIndex={anomaly.endpointId ? 0 : undefined}
+                onClick={() => anomaly.endpointId && navigate(`/reports?endpointId=${anomaly.endpointId}`)}
+                onKeyDown={(event) => {
+                  if (anomaly.endpointId && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    navigate(`/reports?endpointId=${anomaly.endpointId}`);
+                  }
+                }}
               >
                 <div className="card-row">
                   <strong>

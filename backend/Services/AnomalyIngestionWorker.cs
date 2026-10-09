@@ -63,5 +63,10 @@ public sealed class AnomalyIngestionWorker : KafkaConsumerWorker<DetectedAnomaly
                 "AnomalyDetected",
                 message,
                 cancellationToken);
+
+        using var workflowScope = scopeFactory.CreateScope();
+        var workflowService = workflowScope.ServiceProvider
+            .GetRequiredService<IncidentWorkflowService>();
+        await workflowService.ExecuteForAnomalyAsync(message.Id, cancellationToken);
     }
 }

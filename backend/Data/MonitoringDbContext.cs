@@ -26,6 +26,17 @@ public sealed class MonitoringDbContext : DbContext
 
     public DbSet<KnowledgeArticle> KnowledgeArticles => Set<KnowledgeArticle>();
 
+    public DbSet<RemediationAction> RemediationActions => Set<RemediationAction>();
+
+    public DbSet<IncidentKnowledgeMatch> IncidentKnowledgeMatches => Set<IncidentKnowledgeMatch>();
+
+    public DbSet<WorkflowExecution> WorkflowExecutions => Set<WorkflowExecution>();
+
+    public DbSet<SupportContact> SupportContacts => Set<SupportContact>();
+
+    public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+
+    public DbSet<AlertEvent> AlertEvents => Set<AlertEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,8 +48,170 @@ public sealed class MonitoringDbContext : DbContext
         ConfigureKpiSnapshot(modelBuilder);
         ConfigureIncident(modelBuilder);
         ConfigureKnowledgeArticle(modelBuilder);
+        ConfigureIncidentKnowledgeMatch(modelBuilder);
+        ConfigureRemediationAction(modelBuilder);
+        ConfigureWorkflowExecution(modelBuilder);
+        ConfigureAlerting(modelBuilder);
 
 
+    }
+
+    private void ConfigureRemediationAction(ModelBuilder modelBuilder)
+    {
+        var remediation = modelBuilder.Entity<RemediationAction>();
+
+        remediation.ToTable("remediation_actions");
+
+        remediation.HasKey(x => x.Id);
+
+        remediation.Property(x => x.Id)
+            .HasColumnName("id");
+
+        remediation.Property(x => x.RemediationNumber)
+            .HasColumnName("remediation_number")
+            .HasMaxLength(50)
+            .IsRequired();
+
+        remediation.Property(x => x.IncidentId)
+            .HasColumnName("incident_id")
+            .IsRequired();
+
+        remediation.Property(x => x.Target)
+            .HasColumnName("target")
+            .HasMaxLength(1000)
+            .IsRequired();
+
+        remediation.Property(x => x.TargetType)
+            .HasColumnName("target_type")
+            .HasMaxLength(100)
+            .IsRequired();
+
+        remediation.Property(x => x.ActionType)
+            .HasColumnName("action_type")
+            .HasConversion<string>()
+            .HasMaxLength(100)
+            .IsRequired();
+
+        remediation.Property(x => x.RiskLevel)
+            .HasColumnName("risk_level")
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        remediation.Property(x => x.Status)
+            .HasColumnName("status")
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        remediation.Property(x => x.ApprovalStatus)
+            .HasColumnName("approval_status")
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired();
+
+        remediation.Property(x => x.RunbookName)
+            .HasColumnName("runbook_name")
+            .HasMaxLength(200);
+
+        remediation.Property(x => x.Reason)
+            .HasColumnName("reason")
+            .HasColumnType("text");
+
+        remediation.Property(x => x.RequestedBy)
+            .HasColumnName("requested_by")
+            .HasMaxLength(200);
+
+        remediation.Property(x => x.ApprovedBy)
+            .HasColumnName("approved_by")
+            .HasMaxLength(200);
+
+        remediation.Property(x => x.ExecutionOutput)
+            .HasColumnName("execution_output")
+            .HasColumnType("text");
+
+        remediation.Property(x => x.FailureReason)
+            .HasColumnName("failure_reason")
+            .HasColumnType("text");
+
+        remediation.Property(x => x.VerificationSuccessful)
+            .HasColumnName("verification_successful");
+
+        remediation.Property(x => x.CreatedAt)
+            .HasColumnName("created_at");
+
+        remediation.Property(x => x.UpdatedAt)
+            .HasColumnName("updated_at");
+
+        remediation.Property(x => x.ApprovedAt)
+            .HasColumnName("approved_at");
+
+        remediation.Property(x => x.StartedAt)
+            .HasColumnName("started_at");
+
+        remediation.Property(x => x.CompletedAt)
+            .HasColumnName("completed_at");
+
+        remediation.Property(x => x.VerifiedAt)
+            .HasColumnName("verified_at");
+
+        remediation.HasIndex(x => x.RemediationNumber)
+            .IsUnique();
+
+        remediation.HasIndex(x => x.IncidentId);
+
+        remediation.HasIndex(x => x.Status);
+
+        remediation.HasIndex(x => new
+        {
+            x.IncidentId,
+            x.Status
+        });
+
+        remediation.Property(x => x.RejectedBy)
+            .HasColumnName("rejected_by")
+            .HasMaxLength(200);
+
+        remediation.Property(x => x.RejectionReason)
+            .HasColumnName("rejection_reason")
+            .HasMaxLength(2000);
+
+        remediation.HasOne(x => x.Incident)
+            .WithMany(x => x.RemediationActions)
+            .HasForeignKey(x => x.IncidentId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureWorkflowExecution(ModelBuilder modelBuilder)
+    {
+        var workflow = modelBuilder.Entity<WorkflowExecution>();
+        workflow.ToTable("workflow_executions");
+        workflow.HasKey(x => x.Id);
+        workflow.Property(x => x.Id).HasColumnName("id");
+        workflow.Property(x => x.AnomalyId).HasColumnName("anomaly_id").IsRequired();
+        workflow.Property(x => x.IncidentId).HasColumnName("incident_id");
+        workflow.Property(x => x.RemediationId).HasColumnName("remediation_id");
+        workflow.Property(x => x.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
+        workflow.Property(x => x.CurrentStage).HasColumnName("current_stage").HasMaxLength(100);
+        workflow.Property(x => x.Error).HasColumnName("error").HasColumnType("text");
+        workflow.Property(x => x.AttemptCount).HasColumnName("attempt_count").IsRequired();
+        workflow.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+        workflow.Property(x => x.UpdatedAt).HasColumnName("updated_at").IsRequired();
+        workflow.Property(x => x.StartedAt).HasColumnName("started_at");
+        workflow.Property(x => x.CompletedAt).HasColumnName("completed_at");
+        workflow.Property(x => x.EmailNotificationStatus).HasColumnName("email_notification_status").HasMaxLength(50).IsRequired();
+        workflow.Property(x => x.SmsNotificationStatus).HasColumnName("sms_notification_status").HasMaxLength(50).IsRequired();
+        workflow.Property(x => x.WebhookNotificationStatus).HasColumnName("webhook_notification_status").HasMaxLength(50).IsRequired();
+        workflow.Property(x => x.NotificationError).HasColumnName("notification_error").HasColumnType("text");
+        workflow.Property(x => x.StageHistory)
+            .HasColumnName("stage_history")
+            .HasColumnType("jsonb")
+            .HasConversion(
+                stages => System.Text.Json.JsonSerializer.Serialize(stages, (System.Text.Json.JsonSerializerOptions?)null),
+                json => System.Text.Json.JsonSerializer.Deserialize<List<WorkflowStageEvent>>(json, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<WorkflowStageEvent>());
+        workflow.HasIndex(x => x.AnomalyId).IsUnique();
+        workflow.HasIndex(x => x.Status);
+        workflow.HasIndex(x => x.UpdatedAt);
     }
 
     private static void ConfigureMonitoredEndpoint(ModelBuilder modelBuilder)
@@ -436,4 +609,157 @@ public sealed class MonitoringDbContext : DbContext
         entity.HasIndex(x => x.IsActive);
     }
 
+    private void ConfigureIncidentKnowledgeMatch(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<IncidentKnowledgeMatch>();
+
+        entity.ToTable(
+            "incident_knowledge_matches");
+
+        entity.HasKey(x => x.Id);
+
+        entity.Property(x => x.Id)
+            .HasColumnName("id");
+
+        entity.Property(x => x.IncidentId)
+            .HasColumnName("incident_id")
+            .IsRequired();
+
+        entity.Property(x => x.KnowledgeArticleId)
+            .HasColumnName(
+                "knowledge_article_id")
+            .IsRequired();
+
+        entity.Property(x => x.MatchScore)
+            .HasColumnName("match_score")
+            .IsRequired();
+
+        entity.Property(x => x.MatchLevel)
+            .HasColumnName("match_level")
+            .HasMaxLength(50)
+            .IsRequired();
+
+        entity.Property(x => x.MatchReasons)
+            .HasColumnName("match_reasons");
+
+        entity.Property(x => x.WasSelected)
+            .HasColumnName("was_selected")
+            .IsRequired();
+
+        entity.Property(x => x.WasSuccessful)
+            .HasColumnName("was_successful");
+
+        entity.Property(x => x.MatchedAt)
+            .HasColumnName("matched_at")
+            .IsRequired();
+
+        entity.Property(x => x.VerifiedAt)
+            .HasColumnName("verified_at");
+
+        entity.Property(x => x.CreatedAt)
+            .HasColumnName("created_at")
+            .IsRequired();
+
+        entity.Property(x => x.UpdatedAt)
+            .HasColumnName("updated_at")
+            .IsRequired();
+
+        entity.HasOne(x => x.Incident)
+            .WithMany(x => x.KnowledgeMatches)
+            .HasForeignKey(x => x.IncidentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(x => x.KnowledgeArticle)
+            .WithMany(x => x.IncidentMatches)
+            .HasForeignKey(
+                x => x.KnowledgeArticleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        entity.HasIndex(x => x.IncidentId);
+
+        entity.HasIndex(
+            x => x.KnowledgeArticleId);
+
+        entity.HasIndex(
+            x => new
+            {
+                x.IncidentId,
+                x.KnowledgeArticleId
+            })
+            .IsUnique();
+
+        entity.HasIndex(
+            x => new
+            {
+                x.IncidentId,
+                x.WasSelected
+            });
+
+        entity.Property(
+            x => x.LearningAppliedAt)
+        .HasColumnName(
+            "learning_applied_at");
+    }
+
+    private static void ConfigureAlerting(ModelBuilder modelBuilder)
+    {
+
+
+
+        var contact = modelBuilder.Entity<SupportContact>();
+        contact.ToTable("support_contacts");
+        contact.HasKey(x => x.Id);
+        contact.Property(x => x.Id).HasColumnName("id");
+        contact.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+        contact.Property(x => x.Email).HasColumnName("email").HasMaxLength(254);
+        contact.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(20);
+        contact.Property(x => x.Active).HasColumnName("active").IsRequired();
+        contact.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+
+        var rule = modelBuilder.Entity<AlertRule>();
+        rule.ToTable("alert_rules");
+        rule.HasKey(x => x.Id);
+        rule.Property(x => x.Id).HasColumnName("id");
+        rule.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+        rule.Property(x => x.TargetType).HasColumnName("target_type").HasMaxLength(30).IsRequired();
+        rule.Property(x => x.TargetId).HasColumnName("target_id").HasMaxLength(200).IsRequired();
+        rule.Property(x => x.Metric).HasColumnName("metric").HasMaxLength(40).IsRequired();
+        rule.Property(x => x.Threshold).HasColumnName("threshold").IsRequired();
+        rule.Property(x => x.DurationMinutes).HasColumnName("duration_minutes").IsRequired();
+        rule.Property(x => x.Severity).HasColumnName("severity").HasMaxLength(20).IsRequired();
+        rule.Property(x => x.NotifyEmail).HasColumnName("notify_email").IsRequired();
+        rule.Property(x => x.NotifySms).HasColumnName("notify_sms").IsRequired();
+        rule.Property(x => x.ContactIds).HasColumnName("contact_ids").HasColumnType("jsonb")
+            .HasConversion(ids => AlertJson.Serialize(ids), json => AlertJson.Deserialize<List<Guid>>(json));
+        rule.Property(x => x.CooldownMinutes).HasColumnName("cooldown_minutes").IsRequired();
+        rule.Property(x => x.Enabled).HasColumnName("enabled").IsRequired();
+        rule.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+        rule.Property(x => x.BreachStartedAt).HasColumnName("breach_started_at");
+        rule.Property(x => x.Firing).HasColumnName("firing").IsRequired();
+        rule.Property(x => x.LastNotifiedAt).HasColumnName("last_notified_at");
+
+        var alertEvent = modelBuilder.Entity<AlertEvent>();
+        alertEvent.ToTable("alert_events");
+        alertEvent.HasKey(x => x.Id);
+        alertEvent.Property(x => x.Id).HasColumnName("id");
+        alertEvent.Property(x => x.RuleId).HasColumnName("rule_id").IsRequired();
+        alertEvent.Property(x => x.RuleName).HasColumnName("rule_name").HasMaxLength(100).IsRequired();
+        alertEvent.Property(x => x.Target).HasColumnName("target").HasMaxLength(300).IsRequired();
+        alertEvent.Property(x => x.Kind).HasColumnName("kind").HasMaxLength(20).IsRequired();
+        alertEvent.Property(x => x.Severity).HasColumnName("severity").HasMaxLength(20).IsRequired();
+        alertEvent.Property(x => x.Message).HasColumnName("message").HasColumnType("text").IsRequired();
+        alertEvent.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
+        alertEvent.Property(x => x.Deliveries).HasColumnName("deliveries").HasColumnType("jsonb")
+            .HasConversion(items => AlertJson.Serialize(items), json => AlertJson.Deserialize<List<AlertDelivery>>(json));
+        alertEvent.HasIndex(x => x.CreatedAt);
+    }
+}
+
+internal static class AlertJson
+{
+    public static string Serialize<T>(T value) =>
+        System.Text.Json.JsonSerializer.Serialize(value, (System.Text.Json.JsonSerializerOptions?)null);
+
+    public static T Deserialize<T>(string json) where T : new() =>
+        System.Text.Json.JsonSerializer.Deserialize<T>(json, (System.Text.Json.JsonSerializerOptions?)null) ?? new T();
 }

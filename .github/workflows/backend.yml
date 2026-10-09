@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "backend/**"
+      - "backend.Tests/**"
       - ".github/workflows/backend.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "backend.Tests/**"
       - ".github/workflows/backend.yml"
 
 permissions:
@@ -27,8 +29,8 @@ jobs:
         with:
           dotnet-version: "11.0.x"
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore ../backend.Tests/backend.Tests.csproj
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build ../backend.Tests/backend.Tests.csproj --no-restore --configuration Release
       - name: Test
-        run: dotnet test --no-restore --configuration Release
+        run: dotnet test ../backend.Tests/backend.Tests.csproj --no-build --configuration Release
