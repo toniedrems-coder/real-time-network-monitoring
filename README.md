@@ -267,3 +267,5 @@ The **Notifications** page has four tabs: **Rules**, **Contacts**, **History** a
 - `AlertRuleEvaluator` checks enabled rules every 30 seconds, sends a **Triggered** alert once the breach has lasted the configured duration, optional **Reminder**s, and a **Resolved** message when the metric recovers. Every alert and its per-recipient delivery result is stored in **History**.
 - Delivery uses the server-level `Notifications:Email:*` (SMTP) and `Notifications:Sms:*` (Twilio) settings; the `To` values there are only used for incident-workflow summaries. If a transport is not configured, alerts are recorded as `NotConfigured` rather than silently dropped.
 - API: `/api/alerts/contacts`, `/api/alerts/rules`, `/api/alerts/events`, `/api/alerts/transport`.
+
+To run the production compose stack, copy `infrastructure/.env.example` to `infrastructure/.env` and set the required values (database password, public origin and your identity provider's authority, audience and token URL). For local development you do not need compose: run the backend with `dotnet run` and the frontend with `npm run dev`.
